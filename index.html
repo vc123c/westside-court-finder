@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Westside Court Finder</title>
+<meta name="description" content="Free map of every public basketball court, gym, tennis court and field on the LA Westside, showing when each one is free to play, paid, booked for leagues, or closed.">
+<meta property="og:title" content="Westside Court Finder">
+<meta property="og:description" content="Free map of every public basketball court, gym, tennis court and field on the LA Westside, showing when each one is free to play, paid, booked for leagues, or closed.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23D08A12'/%3E%3Cpath d='M2 16h28M16 2v28M6 6c6 6 6 14 0 20M26 6c-6 6-6 14 0 20' stroke='%2316202B' stroke-width='2' fill='none'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a court-finder tool. Summary band, then controls, then map + list side by side, then a per-site weekly "court clock". */
+:root{
+  --bg:#F3F5F7; --surface:#FFFFFF; --ink:#16202B; --muted:#5B6877; --line:#D7DEE6;
+  --accent:#1F5FBF; --accent-ink:#FFFFFF; --ocean:#DCE8F4;
+  --free:#1E8A4C; --dropin:#7CB342; --paid:#D08A12; --league:#B4542E; --prog:#9AA5B4; --unknown:#C9CFD8; --closed:#2B3644; --school:#7B6FB0;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F151C; --surface:#172029; --ink:#E6ECF2; --muted:#9AA8B7; --line:#2A3541;
+  --accent:#6EA2F2; --accent-ink:#0F151C; --ocean:#14273A;
+  --free:#3FBF74; --dropin:#9CCC65; --paid:#E8A93A; --league:#E07A52; --prog:#5E6B7A; --unknown:#3A4553; --closed:#05090D; --school:#9C90D6; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F151C; --surface:#172029; --ink:#E6ECF2; --muted:#9AA8B7; --line:#2A3541;
+  --accent:#6EA2F2; --accent-ink:#0F151C; --ocean:#14273A;
+  --free:#3FBF74; --dropin:#9CCC65; --paid:#E8A93A; --league:#E07A52; --prog:#5E6B7A; --unknown:#3A4553; --closed:#05090D; --school:#9C90D6; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{font-family:var(--display);letter-spacing:.01em;text-wrap:balance;margin:0;line-height:1.05}
+h1{font-size:clamp(2.1rem,5vw,3.2rem);font-weight:800;text-transform:uppercase}
+h2{font-size:1.5rem;font-weight:700;text-transform:uppercase}
+h3{font-size:1.25rem;font-weight:700}
+p{margin:0}
+.muted{color:var(--muted)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:end;justify-content:space-between}
+header .sub{max-width:62ch;color:var(--muted)}
+.eyebrow{font-family:var(--mono);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px 16px;display:flex;flex-direction:column;gap:4px}
+.stat .n{font-family:var(--display);font-size:2.4rem;font-weight:800;line-height:1}
+.stat .n small{font-size:1.1rem;color:var(--muted);font-weight:600}
+.stat .l{font-size:.85rem;color:var(--muted)}
+.stat.alert .n{color:var(--league)}
+.weekband{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.controls{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:end;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px 16px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label,.field .lbl{font-family:var(--mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.seg{display:flex;flex-wrap:wrap;gap:4px}
+.seg button{font:inherit;font-size:.9rem;border:1px solid var(--line);background:var(--bg);color:var(--ink);padding:6px 10px;border-radius:4px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.seg button:focus-visible,select:focus-visible,input:focus-visible,.site:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+select,input[type=range]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:6px 8px}
+input[type=range]{padding:0;accent-color:var(--accent);width:200px;max-width:100%}
+.timeout{font-family:var(--mono);font-size:.95rem;min-width:6ch}
+.check{display:flex;gap:6px;align-items:center;font-size:.9rem;padding:6px 0;cursor:pointer}
+.check input{accent-color:var(--accent);width:16px;height:16px}
+.nowbtn{font:inherit;font-size:.85rem;border:1px solid var(--accent);color:var(--accent);background:transparent;border-radius:4px;padding:6px 10px;cursor:pointer}
+.main{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:16px;align-items:start}
+@media (max-width:860px){.main{grid-template-columns:1fr}}
+.mapbox{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 10px)}
+@media (max-width:860px){.mapbox{position:static}}
+.mapbox svg{width:100%;height:auto;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.8rem;color:var(--muted);padding:8px 4px 2px}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.list{display:flex;flex-direction:column;gap:8px;min-width:0}
+.site{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--prog);border-radius:6px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;cursor:pointer}
+.site.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.site .top{display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap}
+.site .where{font-size:.82rem;color:var(--muted)}
+.pill{font-family:var(--mono);font-size:.72rem;letter-spacing:.03em;padding:3px 8px;border-radius:999px;white-space:nowrap;color:#fff}
+.pill.free{background:var(--free)} .pill.dropin{background:var(--dropin);color:#13210a}
+.pill.paid{background:var(--paid);color:#241600} .pill.league{background:var(--league)}
+.pill.prog{background:var(--prog);color:#10161d} .pill.unknown{background:var(--unknown);color:var(--ink)} .pill.closed{background:var(--closed)} .pill.school{background:var(--school)}
+.facs{display:flex;flex-wrap:wrap;gap:6px}
+.fac{font-size:.78rem;border:1px solid var(--line);border-radius:4px;padding:2px 7px;color:var(--muted)}
+.note{font-size:.85rem}
+.detail{display:none;flex-direction:column;gap:10px;border-top:1px dashed var(--line);padding-top:10px}
+.site.sel .detail{display:flex}
+.clock{overflow-x:auto}
+.bys-h{font-size:1rem;margin:8px 0 0}
+.bysport{overflow-x:auto}
+.bysport table{width:100%;border-collapse:collapse;font-size:.85rem}
+.bysport th,.bysport td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+.bysport thead th{font-weight:600;color:var(--muted);font-size:.75rem}
+.bysport tbody tr{cursor:pointer}
+.bysport tbody tr:hover,.bysport tbody tr:focus-visible{background:var(--bg)}
+.bysport tbody tr.on th{box-shadow:inset 3px 0 0 var(--accent)}
+.bysport .barcol{width:40%;min-width:160px}
+.sbar{display:flex;gap:2px;height:12px}
+.sbar span{min-width:2px}
+.sbar span:first-child{border-radius:4px 0 0 4px}.sbar span:last-child{border-radius:0 4px 4px 0}.sbar span:only-child{border-radius:4px}
+
+.clock table{border-collapse:separate;border-spacing:1px;font-family:var(--mono);font-size:.68rem}
+.clock td{width:16px;height:14px;padding:0;border-radius:1px}
+.clock th{font-weight:400;color:var(--muted);text-align:right;padding-right:6px}
+.clock .hrs th{text-align:left;padding:0}
+.src a{color:var(--accent)}
+.empty{background:var(--surface);border:1px dashed var(--line);border-radius:6px;padding:20px;text-align:center;color:var(--muted)}
+footer{font-size:.82rem;color:var(--muted);display:flex;flex-direction:column;gap:6px;max-width:80ch}
+footer a{color:var(--accent)}
+.kicker{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+@media (prefers-reduced-motion:no-preference){.site{transition:border-color .15s}}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <span class="eyebrow">Prototype · West LA, Santa Monica, Culver City, Beverly Hills</span>
+      <h1>Westside Court Finder</h1>
+      <p class="sub">Find a public court you can play on right now. Pick a sport and a time to see which courts are free, which are paid or reserved, and which have no posted free time.</p>
+    </div>
+  </header>
+
+  <section class="summary" id="summary" aria-label="Summary"></section>
+
+  <section class="weekband" aria-labelledby="wk-h">
+    <div class="kicker"><h2 id="wk-h">Free play, every hour of the week</h2></div>
+    <p class="muted" id="wk-sub"></p>
+    <div class="clock" id="weekclock"></div>
+    <div class="legend" id="weeklegend"></div>
+    <h3 class="bys-h">Free time by sport</h3>
+    <div class="bysport" id="bysport"></div>
+    <p class="muted" id="bysport-note" style="font-size:.8rem;margin:0"></p>
+  </section>
+
+  <section class="controls" aria-label="Filters">
+    <div class="field"><span class="lbl">Sport</span>
+      <div class="seg" id="sport"></div></div>
+    <div class="field"><span class="lbl">Setting</span>
+      <div class="seg" id="setting"></div></div>
+    <div class="field"><label for="day">Day</label>
+      <select id="day"></select></div>
+    <div class="field"><label for="hour">Time</label>
+      <div style="display:flex;gap:8px;align-items:center"><input type="range" id="hour" min="0" max="23.5" step="0.5"><span class="timeout" id="hourOut"></span></div></div>
+    <button class="nowbtn" id="nowBtn" type="button">Set to now</button>
+    <div class="field"><label for="city">Area</label>
+      <select id="city"><option value="all">All areas</option></select></div>
+    <label class="check"><input type="checkbox" id="schools"> Show public school courts</label>
+  </section>
+
+  <section class="main">
+    <div class="mapbox" aria-label="Map of courts">
+      <svg id="map" viewBox="0 0 600 560" role="img" aria-label="Schematic map of West Los Angeles courts"></svg>
+      <div class="legend" id="maplegend"></div>
+    </div>
+    <div class="list" id="list" aria-live="polite"></div>
+  </section>
+
+  <footer>
+    <p><strong>About this data.</strong> Collected Nov. 2–3, 2026. LA city locations come from the city's open data feed of Recreation and Parks facilities. Santa Monica, Culver City and Beverly Hills locations are their published addresses, placed with the US Census geocoder; Ocean View, Douglas, Fox Hills and Culver West Alexander are placed at their courts as mapped in OpenStreetMap. Every site links to its source page and opens in Google Maps.</p>
+    <p><strong>OpenStreetMap additions.</strong> 15 more public parks and 48 public schools (LAUSD, SMMUSD, CCUSD, BHUSD and one charter) come from OpenStreetMap courts and fields, grouped by the park or school they sit in. Their court counts and lighting are as volunteers mapped them and have not been checked with each city. OSM may count each hoop or half court separately. Private schools, clubs, campuses and backyard courts are left out. Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>, ODbL.</p>
+    <p><strong>Schedule updates (Nov. 3, 2026).</strong> Stoner's open gym became a paid club on Oct. 1, 2026 ($5/day or $32/month). Robertson's fall 2026 open gym is Tue/Thu/Fri 11:30 a.m.–1 p.m., $10/month. Rustic Canyon posts open gym Mon/Wed/Fri 12:30–2:30 p.m. on an undated flyer. Westwood's free Tue/Thu open play is confirmed for Sept. 1–Dec. 17, 2026.</p>
+    <p><strong>Rules used.</strong> LA city outdoor courts: park hours 5 a.m. to 10:30 p.m. (LAMC 63.44); unlit courts end at sunset. LA city pay tennis: $8/hr weekdays before 5 p.m., $12/hr after 5 p.m. and weekends; only "open play" courts are free. Santa Monica: free drop-in tennis at Clover, Douglas, Marine and Los Amigos; Reed and Ocean View are reservation courts. Culver City parks are open dawn to dusk. Beverly Hills tennis is reservation-only, 24 hours ahead, no walk-ups.</p>
+    <p><strong>Fields.</strong> No Westside public field posts free open-play hours. LA city turf fields rent for $50–70 an hour (<a href="https://recreation.parks.lacity.gov/sites/default/files/sports/synthetic-turf/2024%20List%20of%20Synthetic%20Fields%20in%20the%20City%20of%20Los%20Angeles-Updated%2005042024.pdf" target="_blank" rel="noopener">2024 synthetic field list</a>), and city adult leagues hold them Mon–Fri 7–10:30 p.m. and Sun 8 a.m.–5 p.m. At Cheviot Hills, grass fields and diamonds are booked through Municipal Sports on weekday evenings after 7 p.m. and on Sundays, and the center publishes its <a href="https://docs.google.com/spreadsheets/d/138x-gQFHFrf_6dIux5nQRkbxoPuBSKDDel9hC_QAGQc/edit" target="_blank" rel="noopener">field calendar</a>. No other Westside center links a field calendar, and none posts lights-off times; lit fields are shown open until the park closes (10:30 p.m. at LA city parks).</p>
+    <p><strong>Gaps worth noting.</strong> Culver City lists no public indoor basketball gym. The LA County park needs assessment counts 0 gymnasiums and 1 basketball court in Beverly Hills, against 26 tennis courts. Westchester does not post hours. Palisades Rec Center is closed for programs after the Palisades Fire. Schedules change each season: call before you go.</p>
+    <p class="src">Sources: <a href="https://data.lacity.org/api/views/ax8j-dhzm" target="_blank" rel="noopener">LA Rec and Parks facility data</a> · <a href="https://recreation.parks.lacity.gov/node/996" target="_blank" rel="noopener">LA tennis reservations</a> · <a href="https://www.santamonicaadultsports.com/content/2523/drop-in-sports" target="_blank" rel="noopener">Santa Monica drop-in sports</a> · <a href="https://www.smgov.net/Departments/CCS/content.aspx?id=32262" target="_blank" rel="noopener">Santa Monica tennis</a> · <a href="https://www.culvercity.gov/Explore/Parks-Recreation/Parks" target="_blank" rel="noopener">Culver City parks</a> · <a href="https://www.beverlyhills.org/route/navigation/318.jsp" target="_blank" rel="noopener">Beverly Hills tennis rules</a> · <a href="https://lacountyparkneeds.org/wp-content/root/FinalReportAppendixA/StudyArea_167.pdf" target="_blank" rel="noopener">LA County park needs, Beverly Hills</a></p>
+  </footer>
+</div>
+
+<script>
+// ---------- DATA ----------
+// Days: 0=Sun..6=Sat. Hours as decimals (21.5 = 9:30 pm).
+const LA_PARK = [5, 22.5];
+const SUNSET = [17.2,17.6,19.1,19.4,19.8,20.1,20.1,19.7,19.1,18.4,16.9,16.8];
+const MF=[1,2,3,4,5], MTH=[1,2,3,4];
+const CHEVIOT_CAL="https://docs.google.com/spreadsheets/d/138x-gQFHFrf_6dIux5nQRkbxoPuBSKDDel9hC_QAGQc/edit";
+function H(spec){ // spec: [[days,open,close],...] -> {d:[o,c]}
+  const h={}; spec.forEach(([ds,o,c])=>ds.forEach(d=>h[d]=[o,c])); return h; }
+
+const SITES = [
+ {id:"westwood",name:"Westwood Recreation Center",city:"LA City · CD5",lat:34.053472,lng:-118.44793,phone:"(310) 473-3610",
+  url:"https://recreation.parks.lacity.gov/node/176",
+  hours:H([[MTH,9,22],[[5],9,20],[[6],9,17]]),
+  facs:[{sport:"basketball",set:"indoor",label:"2 indoor gyms"},{sport:"basketball",set:"outdoor",lit:true,label:"Outdoor courts, lit"},
+        {sport:"tennis",set:"outdoor",lit:false,access:"reserve",label:"Tennis, unlit, reservation"},{sport:"soccer",set:"outdoor",lit:true,access:"permit",synthetic:true,label:"Tommy's Field, lit turf, 300×150 ft"},{sport:"soccer",set:"outdoor",lit:true,access:"permit",synthetic:true,label:"Large turf field, 270×135 ft"}],
+  blocks:[{days:[2,4],s:9.5,e:12.5,kind:"free",label:"Free open play, 18+, QR sign-in",src:"https://recreation.parks.lacity.gov/sites/default/files/reccenter/westwood-recreation-center/media/fall-2026-classes-westwood-rc.pdf"},
+          {days:[1],s:19.5,e:21.5,kind:"league",label:"Adult league, Monday B division ($505/team + $60/game)",src:"https://recreation.parks.lacity.gov/sites/default/files/reccenter/westwood-recreation-center/media/muni-basketball-schedule-westwood-rc-fall-2026_0.pdf"}]},
+ {id:"cheviot",name:"Cheviot Hills Recreation Center",city:"LA City · CD5",lat:34.046898,lng:-118.408263,phone:"(310) 837-5186",
+  url:"https://recreation.parks.lacity.gov/reccenter/cheviot-hills",
+  hours:H([[MF,9,21],[[0,6],9,17]]),
+  facs:[{sport:"basketball",set:"indoor",label:"Indoor gym"},{sport:"basketball",set:"outdoor",lit:true,label:"Outdoor courts, lit"},{sport:"tennis",set:"outdoor",lit:true,access:"reserve",label:"Tennis, lit, pay/reserve"},{sport:"baseball",set:"outdoor",lit:true,access:"permit",muni:true,cal:CHEVIOT_CAL,label:"Baseball diamonds + Dodger Dream Field"},{sport:"soccer",set:"outdoor",access:"permit",muni:true,cal:CHEVIOT_CAL,label:"Grass fields, by permit"}],
+  note:"Fields: weekday evenings after 7 p.m. and Sundays are booked through Municipal Sports; diamonds 4 and 5 are not rented (<a href=\"https://recreation.parks.lacity.gov/sites/default/files/reccenter/cheviot-hills-recreation-center/media/ball-diamonds-grass-info-agreement.pdf\" target=\"_blank\" rel=\"noopener\">field rental info</a>). The adult basketball club below is from a 2025 brochure; no 2026 listing is posted.",
+  blocks:[{days:[2,4],s:12.5,e:14.5,kind:"paid",label:"Adult basketball club, $50 per 8 weeks (winter 2025 brochure; not on current page)",src:"https://laparks.org/sites/default/files/reccenter/cheviot-hills-recreation-center/media/2025-winter-brochure.pdf"},
+          {days:[3],s:19,e:22,kind:"league",label:"Adult league, Wednesday C+ (start times vary)",src:"https://recreation.parks.lacity.gov/sports/basketball"}]},
+ {id:"robertson",name:"Robertson Recreation Center",city:"LA City · CD5",lat:34.0492868,lng:-118.3847196,phone:"(310) 278-5383",
+  url:"https://recreation.parks.lacity.gov/reccenter/robertson",
+  hours:H([[MF,10,19],[[6],10,16]]),
+  facs:[{sport:"basketball",set:"indoor",label:"Indoor gym (opened 2021)"},{sport:"basketball",set:"outdoor",lit:true,label:"Outdoor courts, lit"}],
+  note:"Closes at 7 p.m. on weekdays. Spring 2025 hours ran to 9 p.m.",
+  blocks:[{days:[2,4,5],s:11.5,e:13,kind:"paid",label:"Adult open gym, $10/month (fall 2026 flyer)",src:"https://recreation.parks.lacity.gov/sites/default/files/reccenter/robertson-recreation-center/media/adult-basketball-open-gym-fall-2026.pdf"}]},
+ {id:"panpac",name:"Pan Pacific Park Recreation Center",city:"LA City · CD5",lat:34.07487935,lng:-118.3549473,phone:"Call center",
+  url:"https://recreation.parks.lacity.gov/reccenter/pan-pacific",
+  hours:H([[MF,9,21],[[6],9,17]]),
+  facs:[{sport:"basketball",set:"indoor",label:"Indoor gym, lit"},{sport:"basketball",set:"outdoor",lit:false,label:"Outdoor courts, unlit"},{sport:"soccer",set:"outdoor",access:"permit",synthetic:true,rate:"$50/hr day, $60/hr night",label:"Mini turf field, 240×120 ft"},{sport:"baseball",set:"outdoor",lit:true,access:"permit",label:"Baseball diamond, lit"}],
+  blocks:[{days:[2],s:19,e:22,kind:"league",label:"Adult league, Tuesday C and C+",src:"https://recreation.parks.lacity.gov/sports/basketball"}]},
+ {id:"poinsettia",name:"Poinsettia Recreation Center",city:"LA City · CD5",lat:34.087752,lng:-118.350031,phone:"(323) 876-5014",
+  url:"https://recreation.parks.lacity.gov/reccenter/poinsettia",
+  hours:H([[MF,10,21],[[6],9,17]]),
+  facs:[{sport:"basketball",set:"indoor",label:"Indoor gym, lit"},{sport:"basketball",set:"outdoor",lit:true,label:"Outdoor courts, lit"},
+        {sport:"tennis",set:"outdoor",lit:true,access:"reserve",tennisHours:H([[MF,8,12],[[0,6],8,19]]),tennisHours2:H([[MF,17,21]]),label:"Pay tennis, lit"},{sport:"baseball",set:"outdoor",lit:true,access:"permit",label:"Baseball diamond, lit"}],
+  blocks:[{days:[1,3,4],s:10,e:13,kind:"dropin",label:"Public open gym (fee not posted). Programs have priority.",src:"https://recreation.parks.lacity.gov/reccenter/poinsettia"},
+          {days:[2],s:10,e:12.5,kind:"dropin",label:"Public open gym (fee not posted). Programs have priority.",src:"https://recreation.parks.lacity.gov/reccenter/poinsettia"},
+          {days:[1],s:19,e:22,kind:"league",label:"Fall adult league, Monday nights ($400/team + $45/game refs, Oct. 5–Dec. 14, 2026)",src:"https://recreation.parks.lacity.gov/sites/default/files/reccenter/poinsettia-recreation-center/media/orange-modern-basketball-instagaram-post.pdf"}]},
+ {id:"palms",name:"Palms Recreation Center",city:"LA City · CD5",lat:34.03286932,lng:-118.4177271,phone:"(310) 838-3838",
+  url:"https://recreation.parks.lacity.gov/reccenter/palms",
+  hours:H([[MF,9,21],[[6],9,17]]),
+  facs:[{sport:"basketball",set:"outdoor",lit:true,label:"1 full + 1 half court, lit"}],blocks:[]},
+ {id:"stoner",name:"Stoner Recreation Center",city:"LA City · CD11",lat:34.03844736,lng:-118.4532902,phone:"(310) 479-7200",
+  url:"https://recreation.parks.lacity.gov/reccenter/stoner",
+  hours:H([[MF,9,21],[[6],9,17]]),
+  facs:[{sport:"basketball",set:"indoor",label:"Indoor gym"},{sport:"tennis",set:"outdoor",lit:false,access:"free",label:"6 tennis courts; courts 4–6 open play"},
+        {sport:"soccer",set:"outdoor",lit:false,access:"permit",label:"Fields, by permit"}],
+  note:"Open gym became a paid club on Oct. 1, 2026, citing staffing and operating costs. The flyer says the monthly fee covers three days a week but lists only Monday and Friday.",
+  blocks:[{days:[1,5],s:10,e:13,kind:"paid",label:"Open gym basketball club, $5/day or $32/month (from Oct. 1, 2026)",src:"https://recreation.parks.lacity.gov/sites/default/files/reccenter/stoner-recreation-center/media/october-basketball-club.pdf"}]},
+ {id:"marvista",name:"Mar Vista Recreation Center",city:"LA City · CD11",lat:34.017986,lng:-118.428674,phone:"(310) 398-5982",
+  url:"https://recreation.parks.lacity.gov/reccenter/mar-vista",
+  hours:H([[MF,9,22],[[0,6],9,20.5]]),
+  facs:[{sport:"basketball",set:"indoor",label:"Indoor courts, lit"},{sport:"basketball",set:"outdoor",lit:true,label:"Outdoor courts, lit"},
+        {sport:"tennis",set:"outdoor",lit:true,access:"reserve",label:"Tennis, lit"},{sport:"soccer",set:"outdoor",lit:true,access:"permit",synthetic:true,rate:"$60/hr day, $70/hr night",label:"Large turf field, 315×180 ft"},{sport:"baseball",set:"outdoor",lit:false,access:"permit",label:"Baseball diamond, unlit"},{sport:"football",set:"outdoor",lit:false,access:"permit",label:"Flag football on field"}],blocks:[]},
+ {id:"penmar",name:"Penmar Recreation Center",city:"LA City · CD11",lat:34.006428,lng:-118.45547,phone:"310-396-8735",
+  url:"https://recreation.parks.lacity.gov/reccenter/penmar",
+  hours:H([[MF,9,21],[[6],9,17]]),
+  facs:[{sport:"basketball",set:"indoor",label:"Indoor gym, lit"},{sport:"basketball",set:"outdoor",lit:true,label:"2 full + 1 half court, lit"},
+        {sport:"tennis",set:"outdoor",lit:true,access:"reserve",label:"6 tennis courts, lit"},{sport:"soccer",set:"outdoor",lit:false,access:"permit",label:"Field space"},{sport:"baseball",set:"outdoor",lit:true,access:"permit",label:"5 baseball diamonds, lit"}],
+  blocks:[{days:[4],s:19,e:22,kind:"league",label:"Adult league, Thursday C+",src:"https://recreation.parks.lacity.gov/sports/basketball"}]},
+ {id:"oakwood",name:"Oakwood Recreation Center",city:"LA City · CD11",lat:33.99447842,lng:-118.4635489,phone:"(310) 452-7479",
+  url:"https://recreation.parks.lacity.gov/reccenter/oakwood",
+  hours:H([[MTH,10,22],[[5],10,18],[[6],10,16]]),
+  facs:[{sport:"basketball",set:"indoor",label:"Indoor gym"},{sport:"basketball",set:"outdoor",lit:true,label:"Outdoor courts, lit"},{sport:"soccer",set:"outdoor",lit:false,access:"permit",label:"Multipurpose field"},{sport:"baseball",set:"outdoor",lit:true,access:"permit",label:"Baseball diamond, lit"}],blocks:[]},
+ {id:"venice",name:"Venice Beach Courts",city:"LA City · CD11",lat:33.985826,lng:-118.472771,phone:"Venice Beach Rec Center",
+  url:"https://recreation.parks.lacity.gov/node/169",
+  hours:H([[MF,8,18],[[6],8,16]]),
+  facs:[{sport:"basketball",set:"outdoor",lit:false,label:"Famous outdoor courts, unlit"}],blocks:[]},
+ {id:"barrington",name:"Barrington Recreation Center",city:"LA City · CD11",lat:34.06137723,lng:-118.4686951,phone:"(310) 476-4866",
+  url:"https://recreation.parks.lacity.gov/reccenter/barrington",
+  hours:H([[MTH,10,21],[[5],10,18],[[6],10,17]]),
+  facs:[{sport:"basketball",set:"indoor",label:"Indoor gym, lit"},{sport:"basketball",set:"outdoor",lit:true,label:"Outdoor courts, lit"},
+        {sport:"tennis",set:"outdoor",lit:true,access:"reserve",label:"Tennis, lit"},{sport:"soccer",set:"outdoor",lit:true,access:"permit",label:"Soccer field, lit"},{sport:"football",set:"outdoor",lit:true,access:"permit",label:"Football field, lit"},{sport:"baseball",set:"outdoor",lit:true,access:"permit",label:"2 baseball diamonds"}],
+  note:"No open gym times posted. Call to ask.",blocks:[]},
+ {id:"westchester",name:"Westchester Recreation Center",city:"LA City · CD11",lat:33.95956137,lng:-118.4138213,phone:"(310) 670-7473",
+  url:"https://recreation.parks.lacity.gov/reccenter/westchester",hours:null,
+  facs:[{sport:"basketball",set:"indoor",label:"Indoor courts, lit"},{sport:"tennis",set:"outdoor",lit:true,access:"reserve",label:"Westchester Pay Tennis"},{sport:"soccer",set:"outdoor",lit:true,access:"permit",label:"Multipurpose field, lit"},{sport:"football",set:"outdoor",lit:true,access:"permit",label:"Multipurpose field (football), lit"},{sport:"baseball",set:"outdoor",lit:true,access:"permit",label:"Baseball diamond, lit"}],
+  note:"Hours not posted online. Open gym listed for volleyball and badminton only.",blocks:[]},
+ {id:"palisades",name:"Palisades Recreation Center",city:"LA City · CD11",lat:34.042429,lng:-118.524614,phone:"(310) 454-1412",
+  url:"https://recreation.parks.lacity.gov/reccenter/palisades",closed:"Closed for programs after the Palisades Fire",
+  hours:H([[MF,9,21],[[0,6],9,17]]),
+  facs:[{sport:"basketball",set:"indoor",label:"Indoor gym, lit"},{sport:"basketball",set:"outdoor",lit:true,label:"Outdoor courts, lit"},{sport:"tennis",set:"outdoor",lit:true,access:"reserve",label:"Tennis, lit"},{sport:"football",set:"outdoor",lit:true,access:"permit",label:"Football field, lit"}],blocks:[]},
+ {id:"rustic",name:"Rustic Canyon Recreation Center",city:"LA City · CD11",lat:34.037817,lng:-118.51479,phone:"310-454-9872",
+  url:"https://recreation.parks.lacity.gov/reccenter/rustic-canyon",
+  hours:H([[MTH,9,21],[[5,6],9,17]]),
+  facs:[{sport:"basketball",set:"indoor",label:"Indoor gym, lit"},{sport:"basketball",set:"outdoor",lit:false,label:"Outdoor court, unlit"},{sport:"tennis",set:"outdoor",lit:false,access:"reserve",label:"Tennis, unlit"},{sport:"baseball",set:"outdoor",lit:false,access:"permit",label:"Baseball diamond, unlit"}],
+  note:"The open gym flyer is undated and posts no fee. The fall 2026 class list charges $10/month for volleyball and table tennis open play.",
+  blocks:[{days:[1,3,5],s:12.5,e:14.5,kind:"dropin",label:"Open gym (fee not posted, flyer undated)",src:"https://recreation.parks.lacity.gov/sites/default/files/reccenter/rustic-canyon-recreation-center/media/city-los-angeles-department-recreation-and-parks-rustic-canyon-recreation-center-601-latimer-road.pdf"},
+          {days:[3],s:19.5,e:21,kind:"prog",label:"50+ basketball class, $50 per 8 weeks",src:"https://recreation.parks.lacity.gov/sites/default/files/reccenter/rustic-canyon-recreation-center/media/rustic-canyon-class-list-fall-2026-3.pdf"},
+          {days:[6],s:9,e:10,kind:"prog",label:"50+ basketball class, $50 per 8 weeks",src:"https://recreation.parks.lacity.gov/sites/default/files/reccenter/rustic-canyon-recreation-center/media/rustic-canyon-class-list-fall-2026-3.pdf"}]},
+ {id:"culverslauson",name:"Culver Slauson Recreation Center",city:"LA City · CD11",lat:33.993614,lng:-118.406907,phone:"(310) 391-5451",
+  url:"https://recreation.parks.lacity.gov/reccenter/culver-slauson",hours:H([[MF,9.5,19],[[6],10,16]]),
+  facs:[{sport:"basketball",set:"outdoor",lit:true,label:"Outdoor courts, lit"}],blocks:[]},
+ {id:"crestwood",name:"Crestwood Hills Recreation Center",city:"LA City · CD11",lat:34.07661042,lng:-118.4889191,phone:"(310) 472-5233",
+  url:"https://recreation.parks.lacity.gov/reccenter/crestwood-hills",hours:H([[MF,10,16],[[6],10,17]]),
+  facs:[{sport:"basketball",set:"outdoor",lit:true,label:"Outdoor courts, lit"}],blocks:[]},
+ {id:"smmemorial",name:"Memorial Park",city:"Santa Monica",lat:34.019706,lng:-118.480465,phone:"(310) 458-8237",park:[8,22],
+  url:"https://www.santamonicaadultsports.com/content/2523/drop-in-sports",
+  hours:H([[[1,2,4,5],12,19],[[3],12,21],[[6],12,17],[[0],13.5,17]]),
+  facs:[{sport:"basketball",set:"indoor",label:"Indoor gym, paid drop-in"},{sport:"tennis",set:"outdoor",lit:true,access:"free",tennisHours:H([[[0,1,2,3,4,5,6],8,22]]),label:"4 lit courts (now shared with pickleball)"},{sport:"soccer",set:"outdoor",access:"permit",label:"Soccer field"},{sport:"baseball",set:"outdoor",access:"permit",label:"2 youth baseball + 3 softball fields"}],
+  note:"Santa Monica's only listed public drop-in basketball. Every session costs money, even for residents.",
+  blocks:[{days:[1,2,4,5],s:12,e:15,kind:"paid",label:"Drop-in basketball, $3 resident / $4.50 non-resident per day",src:"https://www.santamonicaadultsports.com/content/2523/drop-in-sports"},
+          {days:[1,2,4,5],s:17,e:19,kind:"paid",label:"Drop-in basketball, $3 resident / $4.50 non-resident per day",src:"https://www.santamonicaadultsports.com/content/2523/drop-in-sports"},
+          {days:[3],s:12,e:15,kind:"paid",label:"Drop-in basketball, $3 resident / $4.50 non-resident per day",src:"https://www.santamonicaadultsports.com/content/2523/drop-in-sports"},
+          {days:[3],s:17,e:21,kind:"paid",label:"Drop-in basketball, $3 resident / $4.50 non-resident per day",src:"https://www.santamonicaadultsports.com/content/2523/drop-in-sports"},
+          {days:[6],s:12,e:17,kind:"paid",label:"Drop-in basketball, $3 resident / $4.50 non-resident per day",src:"https://www.santamonicaadultsports.com/content/2523/drop-in-sports"},
+          {days:[0],s:13.5,e:17,kind:"prog",label:"Gym is drop-in volleyball only",src:"https://www.santamonicaadultsports.com/content/2523/drop-in-sports"}]},
+ {id:"reed",name:"Christine Emerson Reed Park",city:"Santa Monica",lat:34.022336,lng:-118.496448,park:[8,22],
+  url:"https://www.smgov.net/Departments/CCS/content.aspx?id=32262",hours:null,
+  facs:[{sport:"basketball",set:"outdoor",lit:false,label:"Outdoor basketball"},{sport:"tennis",set:"outdoor",lit:true,access:"reserve",tennisHours:H([[[0,1,2,3,4,5,6],8,22]]),label:"6 lit courts, $4–5 per person/hr reservation"}],blocks:[]},
+ {id:"oceanview",name:"Ocean View Park",city:"Santa Monica",lat:33.999650,lng:-118.483950,park:[8,22],
+  url:"https://locator.lacounty.gov/parks/Location/3185207/ocean-view-park",hours:null,
+  facs:[{sport:"basketball",set:"outdoor",lit:false,label:"Outdoor basketball"},{sport:"tennis",set:"outdoor",lit:false,access:"reserve",tennisHours:H([[[0,6],8,17]]),label:"6 unlit courts, reservable weekends"}],blocks:[]},
+ {id:"marine",name:"Marine Park",city:"Santa Monica",lat:34.006076,lng:-118.46603,park:[8,22],
+  url:"https://www.smgov.net/Departments/CCS/content.aspx?id=32262",hours:null,
+  facs:[{sport:"tennis",set:"outdoor",lit:true,access:"free",tennisHours:H([[[0,1,2,3,4,5,6],8,22]]),label:"3 lit courts, free drop-in"}],blocks:[]},
+ {id:"clover",name:"Clover Park",city:"Santa Monica",lat:34.017617,lng:-118.457705,park:[8,22],
+  url:"https://www.smgov.net/Departments/CCS/content.aspx?id=32262",hours:null,
+  facs:[{sport:"tennis",set:"outdoor",lit:true,access:"free",tennisHours:H([[[0,1,2,3,4,5,6],8,22]]),label:"2 lit courts, free drop-in"},{sport:"baseball",set:"outdoor",lit:true,access:"permit",label:"Lit ball fields"}],blocks:[]},
+ {id:"douglas",name:"Douglas Park",city:"Santa Monica",lat:34.036230,lng:-118.480090,park:[8,22],
+  url:"https://www.smgov.net/Departments/CCS/content.aspx?id=32262",hours:null,
+  facs:[{sport:"tennis",set:"outdoor",lit:true,access:"free",tennisHours:H([[[0,1,2,3,4,5,6],8,22]]),label:"2 lit courts, free drop-in"}],blocks:[]},
+ {id:"losamigos",name:"Los Amigos Park",city:"Santa Monica",lat:34.006423,lng:-118.482413,park:[8,22],
+  url:"https://www.smgov.net/Departments/CCS/content.aspx?id=32262",hours:null,
+  facs:[{sport:"tennis",set:"outdoor",lit:true,access:"free",tennisHours:H([[[0,6],8,22],[MF,18,22]]),label:"1 lit court, weekends + weekday evenings"}],blocks:[]},
+ {id:"joslyn",name:"Joslyn Park",city:"Santa Monica",lat:34.008078,lng:-118.481215,park:[8,22],
+  url:"https://www.santamonica.com/santa-monica-parks",hours:null,
+  facs:[{sport:"basketball",set:"outdoor",lit:false,label:"Outdoor basketball"}],blocks:[]},
+ {id:"coloradoctr",name:"Colorado Center Park",city:"Santa Monica",lat:34.030754,lng:-118.474117,park:[8,22],
+  url:"https://locator.lacounty.gov/parks/Location/3186352/colorado-center-park",hours:null,
+  facs:[{sport:"basketball",set:"outdoor",lit:false,label:"Outdoor basketball"},{sport:"tennis",set:"outdoor",access:"reserve",tennisHours:H([[[0,1,2,3,4,5,6],8,15]]),label:"2 private-run courts, $3/hr, singles"}],blocks:[]},
+ {id:"airportpark",name:"Airport Park",city:"Santa Monica",lat:34.015042,lng:-118.447954,park:[8,22],
+  url:"https://remezcla.com/lists/sports/best-places-play-soccer-la/",hours:null,
+  facs:[{sport:"soccer",set:"outdoor",lit:true,access:"permit",label:"Lit turf soccer field"}],
+  note:"Popular pickup spot, but leagues use the field most evenings. Pickup players report weekday nights and early mornings work best.",blocks:[]},
+ {id:"culvervets",name:"Veterans Memorial Park",city:"Culver City",lat:34.01298,lng:-118.40177,park:[6,"dusk"],phone:"310-253-6650",
+  url:"https://www.culvercity.gov/Parks/Veterans-Memorial-Park",hours:null,
+  facs:[{sport:"basketball",set:"outdoor",lit:false,label:"Outdoor basketball"},{sport:"tennis",set:"outdoor",lit:false,access:"free",label:"Tennis court"}],blocks:[]},
+ {id:"culverpark",name:"Culver City Park",city:"Culver City",lat:34.015514,lng:-118.388263,park:[6,"dusk"],phone:"310-253-6650",
+  url:"https://www.culvercity.gov/Parks/Culver-City-Park",hours:null,
+  facs:[{sport:"basketball",set:"outdoor",lit:false,label:"Outdoor basketball"},{sport:"soccer",set:"outdoor",lit:true,access:"permit",label:"Fields, permit groups"}],blocks:[]},
+ {id:"foxhills",name:"Fox Hills Park",city:"Culver City",lat:33.983970,lng:-118.385990,park:[6,21.75],phone:"310-253-6650",
+  url:"https://www.culvercity.gov/Parks/Fox-Hills-Park",hours:null,
+  facs:[{sport:"basketball",set:"outdoor",lit:true,label:"Outdoor basketball, open to 9:45 pm"},{sport:"tennis",set:"outdoor",lit:true,access:"free",label:"Tennis court"}],blocks:[]},
+ {id:"culverwest",name:"Culver West Alexander Park",city:"Culver City",lat:33.993340,lng:-118.434370,park:[6,"dusk"],phone:"310-253-6650",
+  url:"https://www.culvercity.gov/Parks/Culver-West-Alexander-Park",hours:null,
+  facs:[{sport:"basketball",set:"outdoor",lit:false,label:"Outdoor basketball"},{sport:"tennis",set:"outdoor",lit:false,access:"free",label:"Tennis court"}],blocks:[]},
+ {id:"sydk",name:"Syd Kronenthal Park",city:"Culver City",lat:34.028626,lng:-118.378322,park:[6,"dusk"],phone:"310-253-6650",
+  url:"https://www.culvercity.gov/Parks/Syd-Kronenthal-Park",hours:null,
+  facs:[{sport:"basketball",set:"outdoor",lit:false,label:"Outdoor basketball"},{sport:"tennis",set:"outdoor",lit:false,access:"free",label:"Tennis court"}],blocks:[]},
+ {id:"lindberg",name:"Lindberg Park",city:"Culver City",lat:34.004578,lng:-118.398448,park:[6,"dusk"],phone:"310-253-6650",
+  url:"https://www.culvercity.gov/Parks/Lindberg-Park",hours:null,
+  facs:[{sport:"basketball",set:"outdoor",lit:false,label:"Outdoor basketball"},{sport:"tennis",set:"outdoor",lit:false,access:"free",label:"Tennis court"}],blocks:[]},
+ {id:"roxbury",park:[6,"dusk"],name:"Roxbury Park",city:"Beverly Hills",lat:34.057463,lng:-118.405716,phone:"(310) 285-6840",
+  url:"https://www.beverlyhills.org/route/navigation/318.jsp",hours:null,
+  facs:[{sport:"basketball",set:"outdoor",lit:false,label:"Outdoor basketball (only court in Beverly Hills)"},{sport:"tennis",set:"outdoor",lit:true,access:"reserve",tennisHours:H([[[0,1,2,3,4,5,6],7,22]]),label:"4 lit courts, $9–14/hr, no walk-ups"},{sport:"soccer",set:"outdoor",access:"permit",label:"Soccer field"}],blocks:[]},
+ {id:"lacienega",name:"La Cienega Park & Tennis Center",city:"Beverly Hills",lat:34.061886,lng:-118.376183,phone:"310.285.6810",
+  url:"https://beverlyhills.org/route/navigation/171.jsp",hours:H([[[0,1,2,3,4,5,6],6,22]]),
+  facs:[{sport:"tennis",set:"outdoor",lit:true,access:"reserve",tennisHours:H([[[0,1,2,3,4,5,6],7,22]]),label:"Tennis center, $9–14/hr, book 24 hrs ahead"},{sport:"soccer",set:"outdoor",access:"permit",label:"2 seasonal soccer fields"},{sport:"baseball",set:"outdoor",access:"permit",label:"3 baseball diamonds"}],
+  note:"Beverly Hills tennis: reservation 24 hours ahead and a tennis card required. No drop-in or walk-ups.",blocks:[]},
+ // ---- Added from OpenStreetMap, Nov. 2026 (public parks not in the curated list) ----
+ {id:"vetbarrington",name:"Veterans Barrington Park",city:"LA City",lat:34.063125,lng:-118.467066,osmSrc:true,url:"https://www.openstreetmap.org/way/807705250",hours:null,
+  facs:[{sport:"baseball",set:"outdoor",lit:false,access:"permit",label:"2 ball diamonds (OSM)"}],note:"Added from OpenStreetMap. Courts and lighting as mapped there; not yet checked with the city.",blocks:[]},
+ {id:"reynier",name:"Reynier Park",city:"LA City",lat:34.035654,lng:-118.386608,osmSrc:true,url:"https://www.openstreetmap.org/way/225342463",hours:null,
+  facs:[{sport:"basketball",set:"outdoor",lit:false,label:"1 basketball court (OSM)"}],note:"Added from OpenStreetMap. Courts and lighting as mapped there; not yet checked with the city.",blocks:[]},
+ {id:"woodbine",name:"Woodbine Park",city:"LA City",lat:34.027763,lng:-118.408658,osmSrc:true,url:"https://www.openstreetmap.org/way/314518857",hours:null,
+  facs:[{sport:"basketball",set:"outdoor",lit:false,label:"1 basketball court (OSM)"}],note:"Added from OpenStreetMap. Courts and lighting as mapped there; not yet checked with the city.",blocks:[]},
+ {id:"delrey",name:"Del Rey Lagoon Park",city:"LA City",lat:33.958812,lng:-118.450258,osmSrc:true,url:"https://www.openstreetmap.org/way/27370519",hours:null,
+  facs:[{sport:"baseball",set:"outdoor",lit:false,access:"permit",label:"1 ball diamond (OSM)"},{sport:"basketball",set:"outdoor",lit:false,label:"1 basketball court (OSM)"}],note:"Added from OpenStreetMap. Courts and lighting as mapped there; not yet checked with the city.",blocks:[]},
+ {id:"gandara",name:"Gandara Park",city:"Santa Monica",lat:34.027267,lng:-118.465330,park:[8,22],osmSrc:true,url:"https://www.openstreetmap.org/way/43960986",hours:null,
+  facs:[{sport:"baseball",set:"outdoor",lit:false,access:"permit",label:"1 ball diamond (OSM)"},{sport:"basketball",set:"outdoor",lit:false,label:"1 basketball court (OSM)"}],note:"Added from OpenStreetMap. Courts and lighting as mapped there; not yet checked with the city.",blocks:[]},
+ {id:"virginiaave",name:"Virginia Avenue Park",city:"Santa Monica",lat:34.021184,lng:-118.467476,park:[8,22],osmSrc:true,url:"https://www.openstreetmap.org/way/43968624",hours:null,
+  facs:[{sport:"basketball",set:"outdoor",lit:true,label:"2 basketball courts, lit (OSM)"}],note:"Added from OpenStreetMap. Courts and lighting as mapped there; not yet checked with the city.",blocks:[]},
+ {id:"blairhills",name:"Blair Hills Park",city:"Culver City",lat:34.015578,lng:-118.378216,park:[6,"dusk"],osmSrc:true,url:"https://www.openstreetmap.org/way/22968954",hours:null,
+  facs:[{sport:"baseball",set:"outdoor",lit:false,access:"permit",label:"1 ball diamond (OSM)"},{sport:"basketball",set:"outdoor",lit:false,label:"1 basketball court (OSM)"}],note:"Added from OpenStreetMap. Courts and lighting as mapped there; not yet checked with the city.",blocks:[]},
+ {id:"elmarino",name:"El Marino Park",city:"Culver City",lat:33.992303,lng:-118.399440,park:[6,"dusk"],osmSrc:true,url:"https://www.openstreetmap.org/way/22729510",hours:null,
+  facs:[{sport:"basketball",set:"outdoor",lit:false,label:"1 basketball court (OSM)"}],note:"Added from OpenStreetMap. Courts and lighting as mapped there; not yet checked with the city.",blocks:[]},
+ {id:"blanco",name:"Blanco Park",city:"Culver City",lat:33.995995,lng:-118.392338,park:[6,"dusk"],osmSrc:true,url:"https://www.openstreetmap.org/way/443668557",hours:null,
+  facs:[{sport:"baseball",set:"outdoor",lit:false,access:"permit",label:"2 ball diamonds (OSM)"}],note:"Added from OpenStreetMap. Courts and lighting as mapped there; not yet checked with the city.",blocks:[]},
+ {id:"glenalla",name:"Glen Alla Park",city:"LA County",lat:33.983792,lng:-118.430955,park:[6,"dusk"],osmSrc:true,url:"https://www.openstreetmap.org/way/15478927",hours:null,
+  facs:[{sport:"basketball",set:"outdoor",lit:false,label:"1 basketball court (OSM)"},{sport:"tennis",set:"outdoor",lit:false,access:"check",label:"2 tennis courts (OSM)"}],note:"LA County park in Marina del Rey. Hours not confirmed; shown as sunrise to sunset.",blocks:[]},
+ {id:"soboroff",name:"Steve Soboroff Court Park",city:"Playa Vista",lat:33.982816,lng:-118.400110,park:[6,"dusk"],osmSrc:true,url:"https://www.openstreetmap.org/way/353700172",hours:null,
+  facs:[{sport:"basketball",set:"outdoor",lit:false,label:"2 basketball courts (OSM)"},{sport:"tennis",set:"outdoor",lit:false,access:"check",label:"1 tennis court (OSM)"}],note:"Playa Vista community park. Hours and public-access rules not confirmed.",blocks:[]},
+ {id:"pvcentral",name:"Central Park at Playa Vista",city:"Playa Vista",lat:33.981614,lng:-118.405536,park:[6,"dusk"],osmSrc:true,url:"https://www.openstreetmap.org/way/161505917",hours:null,
+  facs:[{sport:"basketball",set:"outdoor",lit:false,label:"1 basketball court (OSM)"},{sport:"soccer",set:"outdoor",lit:false,access:"permit",label:"1 soccer field (OSM)"}],note:"Playa Vista community park. Hours and public-access rules not confirmed.",blocks:[]},
+ {id:"pvsports",name:"The Sports Park at Playa Vista",city:"Playa Vista",lat:33.967361,lng:-118.426216,park:[6,"dusk"],osmSrc:true,url:"https://www.openstreetmap.org/way/218549932",hours:null,
+  facs:[{sport:"baseball",set:"outdoor",lit:false,access:"permit",label:"1 ball diamond (OSM)"},{sport:"basketball",set:"outdoor",lit:false,label:"1 basketball court (OSM)"},{sport:"soccer",set:"outdoor",lit:false,access:"permit",label:"1 soccer field (OSM)"},{sport:"tennis",set:"outdoor",lit:false,access:"check",label:"2 tennis courts (OSM)"}],note:"Playa Vista community park. Hours and public-access rules not confirmed.",blocks:[]},
+ {id:"bluffcreek",name:"Bluff Creek Fields",city:"Playa Vista",lat:33.974968,lng:-118.413632,park:[6,"dusk"],osmSrc:true,url:"https://www.openstreetmap.org/way/562941691",hours:null,
+  facs:[{sport:"soccer",set:"outdoor",lit:false,access:"permit",label:"1 soccer field (OSM)"},{sport:"tennis",set:"outdoor",lit:false,access:"check",label:"1 tennis court (OSM)"}],note:"Hours and public-access rules not confirmed.",blocks:[]},
+ {id:"oberrieder",name:"Oberrieder Park",city:"Playa Vista",lat:33.971595,lng:-118.421119,park:[6,"dusk"],osmSrc:true,url:"https://www.openstreetmap.org/way/766113080",hours:null,
+  facs:[{sport:"basketball",set:"outdoor",lit:false,label:"1 basketball court (OSM)"},{sport:"tennis",set:"outdoor",lit:false,access:"check",label:"1 tennis court (OSM)"}],note:"Hours and public-access rules not confirmed.",blocks:[]},
+ // Public school courts (OpenStreetMap). No public hours posted.
+ {id:"sch-w1445796988",name:"Hawthorne Elementary School",city:"Beverly Hills · school (BHUSD)",school:"BHUSD",lat:34.079811,lng:-118.404729,osmSrc:true,url:"https://www.openstreetmap.org/way/1445796988",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"6 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w913275422",name:"Horace Mann Elementary School",city:"Beverly Hills · school (BHUSD)",school:"BHUSD",lat:34.066025,lng:-118.383338,osmSrc:true,url:"https://www.openstreetmap.org/way/913275422",hours:null,facs:[{sport:"soccer",set:"outdoor",label:"1 soccer field (OSM)"}],blocks:[]},
+ {id:"sch-w490406994",name:"Beverly Hills High School",city:"Beverly Hills · school (BHUSD)",school:"BHUSD",lat:34.061007,lng:-118.410582,osmSrc:true,url:"https://www.openstreetmap.org/way/490406994",hours:null,facs:[{sport:"baseball",set:"outdoor",label:"2 ball diamonds (OSM)"},{sport:"basketball",set:"outdoor",label:"4 basketball courts (OSM)"},{sport:"football",set:"outdoor",label:"1 football field (OSM)"},{sport:"tennis",set:"outdoor",label:"6 tennis courts (OSM)"}],blocks:[]},
+ {id:"sch-w55639773",name:"Warner Elementary School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.069335,lng:-118.434071,osmSrc:true,url:"https://www.openstreetmap.org/way/55639773",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"2 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w1160782437",name:"Paul Revere Charter Middle School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.059003,lng:-118.494933,osmSrc:true,url:"https://www.openstreetmap.org/way/1160782437",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"14 basketball courts (OSM)"},{sport:"soccer",set:"outdoor",label:"1 soccer field (OSM)"},{sport:"tennis",set:"outdoor",label:"2 tennis courts (OSM)"}],blocks:[]},
+ {id:"sch-w909161536",name:"Fairburn Avenue Elementary School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.058585,lng:-118.432035,osmSrc:true,url:"https://www.openstreetmap.org/way/909161536",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"2 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w922786779",name:"Emerson Community Charter School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.053674,lng:-118.435211,osmSrc:true,url:"https://www.openstreetmap.org/way/922786779",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"1 basketball court (OSM)"},{sport:"soccer",set:"outdoor",label:"1 soccer field (OSM)"}],blocks:[]},
+ {id:"sch-w1112838174",name:"Brentwood Science Magnet School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.050803,lng:-118.474165,osmSrc:true,url:"https://www.openstreetmap.org/way/1112838174",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"2 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w392266905",name:"Westwood Elementary School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.048317,lng:-118.430698,osmSrc:true,url:"https://www.openstreetmap.org/way/392266905",hours:null,facs:[{sport:"baseball",set:"outdoor",label:"1 ball diamond (OSM)"},{sport:"basketball",set:"outdoor",label:"2 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w22988371",name:"Palisades Charter High School",city:"LA City · school (charter)",school:"charter",lat:34.048136,lng:-118.530721,osmSrc:true,url:"https://www.openstreetmap.org/way/22988371",hours:null,facs:[{sport:"baseball",set:"outdoor",label:"1 ball diamond (OSM)"},{sport:"basketball",set:"outdoor",label:"1 basketball court (OSM)"},{sport:"football",set:"outdoor",label:"1 football field (OSM)"},{sport:"tennis",set:"outdoor",label:"2 tennis courts (OSM)"}],blocks:[]},
+ {id:"sch-w437551119",name:"Crescent Heights Boulevard Elementary School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.047676,lng:-118.374520,osmSrc:true,url:"https://www.openstreetmap.org/way/437551119",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"2 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w892540812",name:"Los Angeles Center for Enriched Studies",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.045131,lng:-118.371054,osmSrc:true,url:"https://www.openstreetmap.org/way/892540812",hours:null,facs:[{sport:"baseball",set:"outdoor",label:"1 ball diamond (OSM)"},{sport:"basketball",set:"outdoor",label:"8 basketball courts (OSM)"},{sport:"soccer",set:"outdoor",label:"1 soccer field (OSM)"},{sport:"tennis",set:"outdoor",label:"5 tennis courts (OSM)"}],blocks:[]},
+ {id:"sch-w899319778",name:"Nora Sterry Elementary School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.044619,lng:-118.447323,osmSrc:true,url:"https://www.openstreetmap.org/way/899319778",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"2 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w1009167955",name:"University High School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.044340,lng:-118.460088,osmSrc:true,url:"https://www.openstreetmap.org/way/1009167955",hours:null,facs:[{sport:"baseball",set:"outdoor",label:"1 ball diamond (OSM)"},{sport:"basketball",set:"outdoor",label:"1 basketball court (OSM)"},{sport:"football",set:"outdoor",label:"1 football field (OSM)"},{sport:"tennis",set:"outdoor",label:"4 tennis courts (OSM)"}],blocks:[]},
+ {id:"sch-w220407171",name:"Brockton Avenue Elementary School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.043752,lng:-118.462728,osmSrc:true,url:"https://www.openstreetmap.org/way/220407171",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"1 basketball court (OSM)"}],blocks:[]},
+ {id:"sch-w42332685",name:"Franklin Elementary School",city:"Santa Monica · school (SMMUSD)",school:"SMMUSD",lat:34.039028,lng:-118.484891,osmSrc:true,url:"https://www.openstreetmap.org/way/42332685",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"4 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w894756264",name:"Castle Heights Elementary School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.038854,lng:-118.398347,osmSrc:true,url:"https://www.openstreetmap.org/way/894756264",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"2 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w335821225",name:"Overland Elementary School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.038201,lng:-118.420414,osmSrc:true,url:"https://www.openstreetmap.org/way/335821225",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"2 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w264358516",name:"Alexander Hamilton High School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.033635,lng:-118.392797,osmSrc:true,url:"https://www.openstreetmap.org/way/264358516",hours:null,facs:[{sport:"baseball",set:"outdoor",label:"2 ball diamonds (OSM)"},{sport:"basketball",set:"outdoor",label:"2 basketball courts (OSM)"},{sport:"tennis",set:"outdoor",label:"4 tennis courts (OSM)"}],blocks:[]},
+ {id:"sch-w44035782",name:"McKinley Elementary School",city:"Santa Monica · school (SMMUSD)",school:"SMMUSD",lat:34.032866,lng:-118.477582,osmSrc:true,url:"https://www.openstreetmap.org/way/44035782",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"3 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w44035778",name:"Lincoln Middle School",city:"Santa Monica · school (SMMUSD)",school:"SMMUSD",lat:34.029808,lng:-118.489734,osmSrc:true,url:"https://www.openstreetmap.org/way/44035778",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"8 basketball courts (OSM)"},{sport:"football",set:"outdoor",label:"1 football field (OSM)"}],blocks:[]},
+ {id:"sch-w836960753",name:"Daniel Webster Middle School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.027421,lng:-118.434850,osmSrc:true,url:"https://www.openstreetmap.org/way/836960753",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"9 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w836960760",name:"Richland Avenue Elementary School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.027143,lng:-118.438747,osmSrc:true,url:"https://www.openstreetmap.org/way/836960760",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"2 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w391450301",name:"Palms Elementary School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.026083,lng:-118.407227,osmSrc:true,url:"https://www.openstreetmap.org/way/391450301",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"1 basketball court (OSM)"}],blocks:[]},
+ {id:"sch-w44035947",name:"Edison Elementary School",city:"Santa Monica · school (SMMUSD)",school:"SMMUSD",lat:34.024284,lng:-118.464381,osmSrc:true,url:"https://www.openstreetmap.org/way/44035947",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"2 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w23746815",name:"Linwood E Howe Elementary School",city:"Culver City · school (CCUSD)",school:"CCUSD",lat:34.022424,lng:-118.392935,osmSrc:true,url:"https://www.openstreetmap.org/way/23746815",hours:null,facs:[{sport:"soccer",set:"outdoor",label:"1 soccer field (OSM)"}],blocks:[]},
+ {id:"sch-w840695059",name:"Palms Middle School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.021892,lng:-118.415036,osmSrc:true,url:"https://www.openstreetmap.org/way/840695059",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"10 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w376265191",name:"Charnock Road Elementary School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.018495,lng:-118.421079,osmSrc:true,url:"https://www.openstreetmap.org/way/376265191",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"2 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w44035921",name:"Grant Elementary School",city:"Santa Monica · school (SMMUSD)",school:"SMMUSD",lat:34.018265,lng:-118.461138,osmSrc:true,url:"https://www.openstreetmap.org/way/44035921",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"4 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w904022406",name:"Mar Vista Elementary School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.016722,lng:-118.434336,osmSrc:true,url:"https://www.openstreetmap.org/way/904022406",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"2 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w44035845",name:"John Adams Middle School",city:"Santa Monica · school (SMMUSD)",school:"SMMUSD",lat:34.012774,lng:-118.468948,osmSrc:true,url:"https://www.openstreetmap.org/way/44035845",hours:null,facs:[{sport:"baseball",set:"outdoor",label:"1 ball diamond (OSM)"},{sport:"basketball",set:"outdoor",label:"5 basketball courts (OSM)"},{sport:"football",set:"outdoor",label:"1 football field (OSM)"},{sport:"soccer",set:"outdoor",label:"1 soccer field (OSM)"},{sport:"tennis",set:"outdoor",label:"2 tennis courts (OSM)"}],blocks:[]},
+ {id:"sch-w444246722",name:"Santa Monica High School",city:"Santa Monica · school (SMMUSD)",school:"SMMUSD",lat:34.011710,lng:-118.487437,osmSrc:true,url:"https://www.openstreetmap.org/way/444246722",hours:null,facs:[{sport:"baseball",set:"outdoor",label:"1 ball diamond (OSM)"},{sport:"basketball",set:"outdoor",label:"5 basketball courts (OSM)"},{sport:"football",set:"outdoor",label:"1 football field (OSM)"},{sport:"soccer",set:"outdoor",label:"1 soccer field (OSM)"},{sport:"tennis",set:"outdoor",label:"6 tennis courts (OSM)"}],blocks:[]},
+ {id:"sch-w1221062579",name:"Michelle and Barack Obama Center for Inquiry and Exploration",city:"Santa Monica · school (SMMUSD)",school:"SMMUSD",lat:34.007048,lng:-118.477300,osmSrc:true,url:"https://www.openstreetmap.org/way/1221062579",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"1 basketball court (OSM)"}],blocks:[]},
+ {id:"sch-w414731620",name:"Walgrove Elementary School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.006253,lng:-118.451015,osmSrc:true,url:"https://www.openstreetmap.org/way/414731620",hours:null,facs:[{sport:"baseball",set:"outdoor",label:"5 ball diamonds (OSM)"},{sport:"basketball",set:"outdoor",label:"4 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w256666112",name:"Beethoven Street Elementary School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.002900,lng:-118.444302,osmSrc:true,url:"https://www.openstreetmap.org/way/256666112",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"1 basketball court (OSM)"}],blocks:[]},
+ {id:"sch-w915979198",name:"Grand View Boulevard Elementary School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.001852,lng:-118.430674,osmSrc:true,url:"https://www.openstreetmap.org/way/915979198",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"4 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w256666113",name:"Mark Twain Middle School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:34.000929,lng:-118.445450,osmSrc:true,url:"https://www.openstreetmap.org/way/256666113",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"18 basketball courts (OSM)"},{sport:"tennis",set:"outdoor",label:"4 tennis courts (OSM)"}],blocks:[]},
+ {id:"sch-w256666157",name:"Venice High School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:33.997215,lng:-118.442166,osmSrc:true,url:"https://www.openstreetmap.org/way/256666157",hours:null,facs:[{sport:"baseball",set:"outdoor",label:"2 ball diamonds (OSM)"},{sport:"football",set:"outdoor",label:"1 football field (OSM)"}],blocks:[]},
+ {id:"sch-w428916350",name:"Broadway Elementary School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:33.997005,lng:-118.462850,osmSrc:true,url:"https://www.openstreetmap.org/way/428916350",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"2 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w443668563",name:"El Rincon Elementary School",city:"Culver City · school (CCUSD)",school:"CCUSD",lat:33.996014,lng:-118.391813,osmSrc:true,url:"https://www.openstreetmap.org/way/443668563",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"4 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w159764408",name:"Stoner Avenue Elementary School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:33.995824,lng:-118.413045,osmSrc:true,url:"https://www.openstreetmap.org/way/159764408",hours:null,facs:[{sport:"baseball",set:"outdoor",label:"5 ball diamonds (OSM)"},{sport:"basketball",set:"outdoor",label:"4 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w932222283",name:"Braddock Drive Elementary School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:33.992797,lng:-118.416435,osmSrc:true,url:"https://www.openstreetmap.org/way/932222283",hours:null,facs:[{sport:"baseball",set:"outdoor",label:"4 ball diamonds (OSM)"},{sport:"basketball",set:"outdoor",label:"1 basketball court (OSM)"}],blocks:[]},
+ {id:"sch-w22729519",name:"El Marino Language School",city:"Culver City · school (CCUSD)",school:"CCUSD",lat:33.991653,lng:-118.400320,osmSrc:true,url:"https://www.openstreetmap.org/way/22729519",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"2 basketball courts (OSM)"},{sport:"soccer",set:"outdoor",label:"1 soccer field (OSM)"}],blocks:[]},
+ {id:"sch-w44033897",name:"Westminster Elementary School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:33.990747,lng:-118.472483,osmSrc:true,url:"https://www.openstreetmap.org/way/44033897",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"3 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w23393073",name:"Marina Del Rey Middle School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:33.985774,lng:-118.420062,osmSrc:true,url:"https://www.openstreetmap.org/way/23393073",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"18 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w319505921",name:"Playa Del Rey Elementary School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:33.983013,lng:-118.410061,osmSrc:true,url:"https://www.openstreetmap.org/way/319505921",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"3 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w86364207",name:"Paseo Del Rey Fundamental School",city:"LA City · school (LAUSD)",school:"LAUSD",lat:33.957319,lng:-118.434873,osmSrc:true,url:"https://www.openstreetmap.org/way/86364207",hours:null,facs:[{sport:"basketball",set:"outdoor",label:"3 basketball courts (OSM)"}],blocks:[]},
+ {id:"sch-w28738214",name:"Westchester Enriched Science Magnets",city:"LA City · school (LAUSD)",school:"LAUSD",lat:33.956618,lng:-118.430111,osmSrc:true,url:"https://www.openstreetmap.org/way/28738214",hours:null,facs:[{sport:"baseball",set:"outdoor",label:"2 ball diamonds (OSM)"},{sport:"football",set:"outdoor",label:"1 football field (OSM)"},{sport:"tennis",set:"outdoor",label:"5 tennis courts (OSM)"}],blocks:[]},
+];
+// Court counts per curated site as mapped in OpenStreetMap.
+const OSM_COUNTS={"westwood":{"n":"2 basketball courts, 1 soccer field, 8 tennis courts","u":"https://www.openstreetmap.org/way/184711160"},"cheviot":{"n":"5 ball diamonds, 1 basketball court, 14 tennis courts","u":"https://www.openstreetmap.org/way/24655760"},"robertson":{"n":"2 basketball courts","u":"https://www.openstreetmap.org/way/443668573"},"panpac":{"n":"3 ball diamonds, 2 basketball courts, 1 soccer field","u":"https://www.openstreetmap.org/way/40236272"},"poinsettia":{"n":"2 ball diamonds, 3 basketball courts, 8 tennis courts","u":"https://www.openstreetmap.org/way/243866640"},"palms":{"n":"1 ball diamond, 2 basketball courts","u":"https://www.openstreetmap.org/way/443668572"},"stoner":{"n":"1 basketball court, 6 tennis courts","u":"https://www.openstreetmap.org/way/144681412"},"marvista":{"n":"3 ball diamonds, 3 basketball courts, 1 soccer field, 6 tennis courts","u":"https://www.openstreetmap.org/way/150096884"},"penmar":{"n":"3 basketball courts, 6 tennis courts","u":"https://www.openstreetmap.org/way/113486300"},"venice":{"n":"1 basketball court","u":"https://www.openstreetmap.org/way/285608129"},"barrington":{"n":"1 ball diamond, 2 basketball courts, 4 tennis courts","u":"https://www.openstreetmap.org/way/443668556"},"westchester":{"n":"1 ball diamond, 1 basketball court","u":"https://www.openstreetmap.org/way/22729526"},"palisades":{"n":"1 ball diamond, 2 basketball courts","u":"https://www.openstreetmap.org/way/447096581"},"rustic":{"n":"1 ball diamond, 1 basketball court, 6 tennis courts","u":"https://www.openstreetmap.org/way/486256898"},"culverslauson":{"n":"1 ball diamond, 2 basketball courts","u":"https://www.openstreetmap.org/way/23393139"},"smmemorial":{"n":"3 ball diamonds, 4 tennis courts","u":"https://www.openstreetmap.org/way/42498928"},"reed":{"n":"2 basketball courts, 6 tennis courts","u":"https://www.openstreetmap.org/way/42425869"},"oceanview":{"n":"1 basketball court, 6 tennis courts","u":"https://www.openstreetmap.org/way/447911040"},"marine":{"n":"2 ball diamonds, 2 basketball courts, 3 tennis courts","u":"https://www.openstreetmap.org/way/320113800"},"clover":{"n":"3 ball diamonds, 1 basketball court, 2 tennis courts","u":"https://www.openstreetmap.org/way/113485888"},"douglas":{"n":"2 tennis courts","u":"https://www.openstreetmap.org/way/42333072"},"losamigos":{"n":"2 ball diamonds, 1 basketball court, 1 tennis court","u":"https://www.openstreetmap.org/way/44037203"},"joslyn":{"n":"1 basketball court","u":"https://www.openstreetmap.org/way/43991240"},"coloradoctr":{"n":"1 basketball court, 2 tennis courts","u":"https://www.openstreetmap.org/way/443668559"},"airportpark":{"n":"1 soccer field","u":"https://www.openstreetmap.org/way/386357773"},"culvervets":{"n":"2 ball diamonds, 2 basketball courts, 2 tennis courts","u":"https://www.openstreetmap.org/way/22729467"},"foxhills":{"n":"1 ball diamond, 1 basketball court, 3 tennis courts","u":"https://www.openstreetmap.org/way/22729521"},"culverwest":{"n":"1 basketball court, 1 tennis court","u":"https://www.openstreetmap.org/way/160068867"},"sydk":{"n":"2 ball diamonds, 1 basketball court, 3 tennis courts","u":"https://www.openstreetmap.org/way/23008654"},"lindberg":{"n":"2 ball diamonds, 1 basketball court, 1 soccer field, 1 tennis court","u":"https://www.openstreetmap.org/way/22729500"},"roxbury":{"n":"1 ball diamond, 2 basketball courts, 4 tennis courts","u":"https://www.openstreetmap.org/way/178733975"}};
+
+// ---------- STATUS LOGIC ----------
+const ST = {
+ free:{t:"Free to play",c:"free",rank:0}, dropin:{t:"Drop-in, fee not posted",c:"dropin",rank:1},
+ paid:{t:"Pay or reserve",c:"paid",rank:2}, league:{t:"League game",c:"league",rank:3},
+ prog:{t:"No posted free time",c:"prog",rank:4}, school:{t:"School, no public hours",c:"school",rank:5},
+ unknown:{t:"Not confirmed",c:"unknown",rank:6}, closed:{t:"Closed",c:"closed",rank:7}};
+const DAYS=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const DSH=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const month=new Date().getMonth();
+function within(h,d,t){ if(!h) return null; const r=h[d]; return !!(r && t>=r[0] && t<r[1]); }
+function facStatus(site,f,d,t){
+  if(site.closed) return {k:"closed",why:site.closed};
+  if(site.school) return {k:"school",why:`Public school grounds (${site.school}). No public hours posted.`};
+  if(f.sport==="basketball" && f.set==="indoor"){
+    const open=within(site.hours,d,t);
+    if(open===null) return {k:"unknown",why:"Gym hours not posted"};
+    if(!open) return {k:"closed",why:"Gym closed"};
+    const b=(site.blocks||[]).find(b=>b.days.includes(d)&&t>=b.s&&t<b.e);
+    if(b) return {k:b.kind,why:b.label,src:b.src};
+    return {k:"prog",why:"Open, but only leagues, classes, permits or youth programs are posted"};
+  }
+  const pk=site.park||LA_PARK, sun=SUNSET[month];
+  const pkEnd = pk[1]==="dusk"? (f.lit? 22 : sun) : pk[1];
+  const endLit=pkEnd, endDark=Math.min(sun,pkEnd);
+  const outdoorOpen = t>=pk[0] && t < (f.lit?endLit:endDark);
+  if(f.sport==="basketball"){ return outdoorOpen?{k:"free",why:f.lit?"Outdoor, first come":"Outdoor, until sunset"}:{k:"closed",why:f.lit?"Park closed":"After dark, no lights"}; }
+  if(f.sport==="tennis"){
+    if(f.access==="check") return {k:"unknown",why:"Court fee or reservation rules not confirmed"};
+    if(f.tennisHours){ const a=within(f.tennisHours,d,t)||within(f.tennisHours2||null,d,t); if(!a) return {k:"closed",why:"Outside court hours"}; return f.access==="free"?{k:"free",why:"Free drop-in courts, first come"}:{k:"paid",why:"Reservation or court fee required"}; }
+    if(!outdoorOpen) return {k:"closed",why:f.lit?"Park closed":"After dark, no lights"};
+    if(f.access==="free") return {k:"free",why:"Open-play courts, first come"};
+    return {k:"paid",why:site.city.startsWith("LA City")?"LA city pay courts: $8/hr weekdays before 5 pm, $12/hr evenings and weekends":"Court fee or reservation"};
+  }
+  // fields
+  if(!outdoorOpen) return {k:"closed",why:f.lit?"Park closed":"After dark, no lights"};
+  if(f.synthetic && site.city.startsWith("LA City") && ((d>=1&&d<=5&&t>=19&&t<22.5)||(d===0&&t>=8&&t<17)))
+    return {k:"league",why:"City adult-league hours on turf fields (Mon–Fri 7–10:30 pm, Sun 8 am–5 pm)"};
+  if(f.muni && ((d>=1&&d<=5&&t>=19)||d===0))
+    return {k:"league",why:"Booked through Municipal Sports (weekdays after 7 pm and Sundays)"};
+  return {k:"prog",why:"Rented by permit"+(f.rate?" ("+f.rate+")":"")+"; no open-play times posted"};
+}
+function matches(f){
+  if(state.sport!=="all" && f.sport!==state.sport) return false;
+  if(state.set!=="all" && f.set!==state.set) return false;
+  return true;
+}
+function siteStatus(site,d,t){
+  const fs=site.facs.filter(matches).map(f=>({f,s:facStatus(site,f,d,t)}));
+  if(!fs.length) return null;
+  fs.sort((a,b)=>ST[a.s.k].rank-ST[b.s.k].rank);
+  return {best:fs[0],all:fs};
+}
+
+// ---------- STATE ----------
+function laNow(){
+  const p=new Intl.DateTimeFormat("en-US",{timeZone:"America/Los_Angeles",weekday:"short",hour:"numeric",minute:"numeric",hour12:false}).formatToParts(new Date());
+  const g=k=>p.find(x=>x.type===k).value;
+  let h=+g("hour")%24, m=+g("minute");
+  return {d:DSH.indexOf(g("weekday")),t:Math.floor((h+m/60)*2)/2};
+}
+const state={sport:"all",set:"all",city:"all",schools:true,sel:null,...laNow()};
+if(state.t<6||state.t>=22.5){state.t=19;}
+try{const s=JSON.parse(localStorage.getItem("wcf")||"{}"); if(s.sport) state.sport=s.sport; if(s.set) state.set=s.set; if(s.city) state.city=s.city; if(typeof s.schools==="boolean") state.schools=s.schools;}catch(e){}
+function save(){try{localStorage.setItem("wcf",JSON.stringify({sport:state.sport,set:state.set,city:state.city,schools:state.schools}))}catch(e){}}
+function fmt(t){const h=Math.floor(t),m=t%1?"30":"00";const hh=((h+11)%12)+1;return `${hh}:${m} ${h<12?"am":"pm"}`;}
+
+// ---------- CONTROLS ----------
+function seg(id,opts,key){
+  const el=document.getElementById(id); el.innerHTML="";
+  opts.forEach(([v,l])=>{const b=document.createElement("button");b.type="button";b.textContent=l;b.setAttribute("aria-pressed",state[key]===v);
+    b.onclick=()=>{state[key]=v;save();render();};el.appendChild(b);});
+}
+const daySel=document.getElementById("day"); DAYS.forEach((d,i)=>daySel.add(new Option(d,i)));
+daySel.onchange=()=>{state.d=+daySel.value;render();};
+const hr=document.getElementById("hour"); hr.oninput=()=>{state.t=+hr.value;render();};
+document.getElementById("nowBtn").onclick=()=>{Object.assign(state,laNow());render();};
+const citySel=document.getElementById("city");
+[...new Set(SITES.map(s=>s.city.split(" · ")[0]))].forEach(c=>citySel.add(new Option(c,c)));
+citySel.onchange=()=>{state.city=citySel.value;save();render();};
+const schoolBox=document.getElementById("schools"); schoolBox.onchange=()=>{state.schools=schoolBox.checked;save();render();};
+function visible(s){return (state.city==="all"||s.city.startsWith(state.city)) && (state.schools||!s.school);}
+
+// ---------- MAP ----------
+const B={n:34.100,s:33.945,w:-118.545,e:-118.335}, W=600,Hh=560;
+const kx=Math.cos(34*Math.PI/180);
+const sc=Math.min(W/((B.e-B.w)*kx),Hh/(B.n-B.s));
+function P(lat,lng){return [ (lng-B.w)*kx*sc+8, (B.n-lat)*sc+8 ];}
+const COAST=[[34.050,-118.570],[34.042,-118.552],[34.036,-118.535],[34.028,-118.518],[34.018,-118.507],[34.008,-118.497],[33.998,-118.487],[33.988,-118.478],[33.978,-118.469],[33.968,-118.461],[33.958,-118.453],[33.948,-118.447],[33.930,-118.440]];
+const PLACES=[["Pacific Palisades",34.056,-118.515],["Santa Monica",34.030,-118.485],["Venice",33.993,-118.452],["Westwood",34.068,-118.445],["Brentwood",34.074,-118.488],["Mar Vista",34.012,-118.436],["Palms",34.026,-118.425],["Culver City",34.003,-118.398],["Beverly Hills",34.078,-118.410],["Westchester",33.950,-118.395],["Fairfax",34.092,-118.360],["PACIFIC OCEAN",33.975,-118.528]];
+const ROADS=[
+ ["I-405",true,[[34.100,-118.474],[34.082,-118.472],[34.070,-118.455],[34.0595,-118.4485],[34.0475,-118.443],[34.031,-118.435],[34.0145,-118.425],[34.000,-118.410],[33.986,-118.396],[33.960,-118.378],[33.945,-118.372]]],
+ ["I-10",true,[[34.012,-118.494],[34.024,-118.470],[34.028,-118.452],[34.031,-118.435],[34.032,-118.413],[34.036,-118.388],[34.035,-118.376],[34.040,-118.336]]],
+ ["Wilshire",false,[[34.0197,-118.5006],[34.0235,-118.4955],[34.039,-118.468],[34.0597,-118.444],[34.0665,-118.400],[34.0645,-118.376],[34.063,-118.336]]],
+ ["Venice Blvd",false,[[33.985,-118.469],[34.000,-118.441],[34.0145,-118.425],[34.026,-118.396],[34.034,-118.370],[34.040,-118.336]]],
+ ["Santa Monica Blvd",false,[[34.0137,-118.4935],[34.030,-118.474],[34.0475,-118.443],[34.060,-118.420],[34.076,-118.398],[34.090,-118.375],[34.090,-118.336]]],
+];
+function drawMap(statusById){
+  const svg=document.getElementById("map");
+  const ocean=COAST.map(c=>P(...c)); ocean.push([0,Hh+20],[0,0]); ocean.unshift([0,0]);
+  let h=`<rect x="0" y="0" width="${W}" height="${Hh}" fill="var(--surface)"/>`;
+  h+=`<polygon points="${ocean.map(p=>p.join(",")).join(" ")}" fill="var(--ocean)"/>`;
+  ROADS.forEach(([n,fw,pts])=>{const q=pts.map(c=>P(...c).join(",")).join(" ");h+=`<polyline points="${q}" fill="none" stroke="var(--line)" stroke-width="${fw?4:2}" stroke-linecap="round" stroke-linejoin="round"/>`;const m=P(...pts[Math.floor(pts.length/2)]);h+=`<text x="${m[0]+6}" y="${m[1]-6}" font-family="IBM Plex Mono, monospace" font-size="9" fill="var(--muted)">${n}</text>`;});
+  PLACES.forEach(([n,la,lo])=>{const[x,y]=P(la,lo);h+=`<text x="${x}" y="${y}" font-family="IBM Plex Mono, monospace" font-size="10" letter-spacing="1" fill="var(--muted)" text-anchor="middle">${n.toUpperCase()}</text>`;});
+  SITES.forEach(s=>{
+    if(!visible(s)) return;
+    const st=statusById[s.id]; const [x,y]=P(s.lat,s.lng);
+    const col=st?`var(--${ST[st.best.s.k].c})`:"none";
+    const sel=state.sel===s.id;
+    if(!st){h+=`<circle cx="${x}" cy="${y}" r="3" fill="var(--line)"/>`;return;}
+    h+=`<g data-id="${s.id}" style="cursor:pointer"><circle cx="${x}" cy="${y}" r="${sel?11:8}" fill="${col}" stroke="var(--surface)" stroke-width="2"/>${sel?`<circle cx="${x}" cy="${y}" r="15" fill="none" stroke="var(--accent)" stroke-width="2"/>`:""}<title>${s.name}: ${ST[st.best.s.k].t}</title></g>`;
+  });
+  svg.innerHTML=h;
+  svg.querySelectorAll("g[data-id]").forEach(g=>g.onclick=()=>{state.sel=g.dataset.id;render();const el=document.getElementById("s-"+state.sel);el&&el.scrollIntoView({block:"nearest",behavior:"smooth"});});
+}
+function legend(id,keys){document.getElementById(id).innerHTML=keys.map(k=>`<span><span class="sw" style="background:var(--${ST[k].c})"></span>${ST[k].t}</span>`).join("");}
+
+// ---------- CLOCK (7 x 48 half-hours) ----------
+function clockTable(fn){
+  let h=`<table><tr class="hrs"><th></th>`;
+  for(let i=0;i<48;i++) h+= i%6===0?`<th colspan="6">${fmt(i/2).replace(":00","")}</th>`:"";
+  h+="</tr>";
+  for(let d=1;d<=7;d++){const dd=d%7; h+=`<tr><th>${DSH[dd]}</th>`;
+    for(let i=0;i<48;i++){const r=fn(dd,i/2); h+=`<td style="background:${r.c}" title="${DSH[dd]} ${fmt(i/2)}: ${r.t}"></td>`;}
+    h+="</tr>";}
+  return h+"</table>";
+}
+
+// ---------- WEEK SUMMARY (follows the Sport, Setting and Area filters) ----------
+const FIELD_SPORTS=["soccer","football","baseball"];
+const SCHOOL_HOOPS=SITES.filter(s=>s.school).reduce((n,s)=>n+s.facs.filter(f=>f.sport==="basketball").reduce((m,f)=>m+parseInt(f.label),0),0);
+const SCHOOLS_N=SITES.filter(s=>s.school&&s.facs.some(f=>f.sport==="basketball")).length;
+const SPORT_NAME={all:"all sports",basketball:"basketball",soccer:"soccer",football:"football",baseball:"baseball and softball",tennis:"tennis"};
+const GROUPS=[["basketball","indoor","Basketball, indoor gyms"],["basketball","outdoor","Basketball, outdoor courts"],["tennis","outdoor","Tennis"],["soccer","outdoor","Soccer fields"],["baseball","outdoor","Baseball and softball"],["football","outdoor","Football fields"]];
+const KINDS=["free","dropin","paid","league","prog"];
+function wkScope(){return SITES.filter(s=>!s.school&&(state.city==="all"||s.city.startsWith(state.city)));}
+// Hours per status for every matching facility, plus how many places post times.
+function weekStats(test){
+  const r={places:0,known:0,open:0,eveFree:0,k:{free:0,dropin:0,paid:0,league:0,prog:0},freeFacs:0,facs:0};
+  wkScope().forEach(s=>{const fs=s.facs.filter(test); if(!fs.length) return; r.places++; let kn=false;
+    fs.forEach(f=>{r.facs++; let anyFree=false;
+      for(let d=0;d<7;d++) for(let i=0;i<48;i++){const t=i/2,k=facStatus(s,f,d,t).k;
+        if(k==="closed"||k==="unknown") continue; kn=true; r.open+=.5; if(r.k[k]!==undefined) r.k[k]+=.5;
+        if(k==="free"){anyFree=true; if(t>=17||d===0||d===6) r.eveFree+=.5;}}
+      if(anyFree) r.freeFacs++;});
+    if(kn) r.known++;});
+  return r;
+}
+const hrs=n=>Number.isInteger(n)?n.toLocaleString():n.toFixed(1);
+const pctTxt=p=>p>0&&p<1?p.toFixed(1):String(Math.round(p));
+function renderWeek(){
+  const test=matches, w=weekStats(test), sn=SPORT_NAME[state.sport];
+  const setTxt=state.set==="indoor"?" indoor":state.set==="outdoor"?" outdoor":"";
+  const gymView=state.sport==="basketball"&&state.set==="indoor";
+  const placeWord=gymView?"gyms":"places";
+  document.getElementById("wk-h").textContent=`Free ${state.sport==="all"?(setTxt?setTxt.trim()+" play, all sports":"play, all sports"):setTxt.trim()+(setTxt?" ":"")+sn}, every hour of the week`;
+  document.getElementById("wk-sub").textContent=w.known?`Each cell is a half hour. Color shows the best option among the ${w.known} ${placeWord} with posted times${state.city==="all"?"":" in "+state.city}. Change Sport, Setting or Area below to redraw it.`:"No places with posted times match these filters.";
+  document.getElementById("weekclock").innerHTML=clockTable((d,t)=>{
+    const c={free:0,dropin:0,paid:0,league:0,prog:0};
+    wkScope().forEach(s=>{const ks=s.facs.filter(test).map(f=>facStatus(s,f,d,t).k).filter(k=>c[k]!==undefined); if(!ks.length) return;
+      ks.sort((a,b)=>ST[a].rank-ST[b].rank); c[ks[0]]++;});
+    const open=KINDS.reduce((n,k)=>n+c[k],0);
+    if(c.free) return {c:"var(--free)",t:`${c.free} of ${open} open ${placeWord} free`};
+    if(c.dropin) return {c:"var(--dropin)",t:`${c.dropin} with drop-in, fee not posted`};
+    if(c.paid) return {c:"var(--paid)",t:`${c.paid} open to pay or reserve, none free`};
+    if(c.league) return {c:"var(--league)",t:`${c.league} booked for leagues, none free`};
+    if(c.prog) return {c:"var(--prog)",t:`${c.prog} open, no free time posted`};
+    return {c:"var(--closed)",t:"All closed"};
+  });
+  document.getElementById("weeklegend").innerHTML=`<span><span class="sw" style="background:var(--free)"></span>At least one free</span><span><span class="sw" style="background:var(--dropin)"></span>Drop-in, fee not posted</span><span><span class="sw" style="background:var(--paid)"></span>Pay or reserve only</span><span><span class="sw" style="background:var(--league)"></span>League use only</span><span><span class="sw" style="background:var(--prog)"></span>Open, no free time posted</span><span><span class="sw" style="background:var(--closed)"></span>All closed</span>`;
+  // Breakdown by sport: share of open hours by status.
+  const rows=GROUPS.filter(([sp,se])=>state.set==="all"||state.set===se).map(([sp,se,l])=>({sp,se,l,w:weekStats(f=>f.sport===sp&&f.set===se)})).filter(r=>r.w.open);
+  const cur=r=>(state.sport===r.sp||state.sport==="all")&&(state.set===r.se||state.set==="all");
+  document.getElementById("bysport").innerHTML=`<table><thead><tr><th scope="col">Sport</th><th scope="col">Places</th><th scope="col">Open hrs/wk</th><th scope="col">Free hrs/wk</th><th scope="col" class="barcol">Share of open hours</th></tr></thead><tbody>${rows.map(r=>{
+      const segs=KINDS.filter(k=>r.w.k[k]).map(k=>`<span style="flex:${r.w.k[k]};background:var(--${ST[k].c})" title="${r.l}: ${hrs(r.w.k[k])} hrs/wk ${ST[k].t.toLowerCase()}"></span>`).join("");
+      return `<tr class="${cur(r)?"on":""}" data-sp="${r.sp}" data-se="${r.se}" tabindex="0" title="Show only ${r.l.toLowerCase()}"><th scope="row">${r.l}</th><td class="mono">${r.w.known}</td><td class="mono">${hrs(r.w.open)}</td><td class="mono">${hrs(r.w.k.free)} <span class="muted">(${pctTxt(r.w.k.free/r.w.open*100)}%)</span></td><td class="barcol"><div class="sbar">${segs}</div></td></tr>`;}).join("")}</tbody></table>`;
+  document.querySelectorAll("#bysport tr[data-sp]").forEach(tr=>{const go=()=>{state.sport=tr.dataset.sp;state.set=tr.dataset.se;save();render();};tr.onclick=go;tr.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};});
+  document.getElementById("bysport-note").textContent=state.sport==="all"?"Bars use the same colors as the week chart. Click a row to show just that sport.":"Click a row to switch sport, or pick All sports below to compare them all.";
+  // Headline numbers for the current selection.
+  const pct=w.open?w.k.free/w.open*100:0, low=pct<20;
+  const fieldsIn=(state.sport==="all"||FIELD_SPORTS.includes(state.sport))&&state.set!=="indoor";
+  const fs=fieldsIn?weekStats(f=>FIELD_SPORTS.includes(f.sport)&&(state.sport==="all"||f.sport===state.sport)):null;
+  let h=`<div class="stat"><span class="n">${w.places}</span><span class="l">public ${placeWord} with ${state.sport==="all"?(setTxt?setTxt.trim():"sports")+" facilities":(setTxt.trim()+(setTxt?" ":"")+sn)} in ${state.city==="all"?"this area":state.city}</span></div>
+   <div class="stat"><span class="n mono">${hrs(w.open)}<small> hrs/wk</small></span><span class="l">open hours, added up across ${w.facs} ${gymView?"gyms":"listed gyms, court groups and fields"} at the ${w.known} places that post times</span></div>
+   <div class="stat${low?" alert":""}"><span class="n mono">${hrs(w.k.free)}<small> hrs/wk</small></span><span class="l">posted free play (${pctTxt(pct)}% of open hours)</span></div>
+   <div class="stat${low?" alert":""}"><span class="n mono">${hrs(w.eveFree)}<small> hrs/wk</small></span><span class="l">free play after 5 p.m. or on weekends</span></div>`;
+  if(fs&&fs.facs) h+=`<div class="stat alert"><span class="n mono">${fs.freeFacs}<small> of ${fs.facs}</small></span><span class="l">fields and diamonds with posted free open-play hours. Turf fields rent for $50–70/hr.</span></div>`;
+  if((state.sport==="all"||state.sport==="basketball")&&state.set!=="indoor"&&state.city==="all") h+=`<div class="stat alert"><span class="n mono">${SCHOOL_HOOPS}<small> at ${SCHOOLS_N} schools</small></span><span class="l">outdoor basketball courts at public schools (as mapped in OpenStreetMap), none with posted public hours</span></div>`;
+  document.getElementById("summary").innerHTML=h;
+}
+
+// ---------- LIST ----------
+function render(){
+  seg("sport",[["all","All sports"],["basketball","Basketball"],["soccer","Soccer"],["football","Football"],["baseball","Baseball"],["tennis","Tennis"]],"sport");
+  seg("setting",[["indoor","Indoor"],["outdoor","Outdoor"],["all","Both"]],"set");
+  daySel.value=state.d; hr.value=state.t; document.getElementById("hourOut").textContent=fmt(state.t); citySel.value=state.city; schoolBox.checked=state.schools;
+  const statusById={}; const rows=[];
+  SITES.forEach(s=>{ if(!visible(s)) return; const st=siteStatus(s,state.d,state.t); if(st){statusById[s.id]=st; rows.push({s,st});}});
+  rows.sort((a,b)=>ST[a.st.best.s.k].rank-ST[b.st.best.s.k].rank||a.s.name.localeCompare(b.s.name));
+  drawMap(statusById);
+  legend("maplegend",["free","dropin","paid","league","prog","school","unknown","closed"]);
+  const list=document.getElementById("list");
+  const freeN=rows.filter(r=>r.st.best.s.k==="free").length;
+  let h=`<div class="kicker"><h2>${DAYS[state.d]}, ${fmt(state.t)}</h2><span class="muted">${freeN} of ${rows.length} places free to play</span></div>`;
+  if(!rows.length) h+=`<div class="empty">No places in this area have that sport and setting. Try "Both" or "All areas".</div>`;
+  rows.forEach(({s,st})=>{
+    const k=st.best.s.k;
+    h+=`<article class="site ${state.sel===s.id?"sel":""}" id="s-${s.id}" tabindex="0" style="border-left-color:var(--${ST[k].c})">
+      <div class="top"><div><h3>${s.name}</h3><div class="where">${s.city}${s.phone?" · "+s.phone:""}</div></div><span class="pill ${ST[k].c}">${ST[k].t}</span></div>
+      <p class="note">${st.best.s.why}</p>
+      <div class="facs">${st.all.map(x=>`<span class="fac" title="${ST[x.s.k].t}"><span class="sw" style="background:var(--${ST[x.s.k].c})"></span>${x.f.label}</span>`).join("")}</div>
+      <div class="detail">
+        ${s.note?`<p class="note">${s.note}</p>`:""}
+        ${st.all.map(x=>`<div><div class="muted" style="font-size:.8rem;margin-bottom:4px">${x.f.label} · week at a glance</div><div class="clock">${clockTable((d,t)=>{const r=facStatus(s,x.f,d,t);return{c:`var(--${ST[r.k].c})`,t:ST[r.k].t+": "+r.why};})}</div></div>`).join("")}
+        ${st.all.filter(x=>x.f.cal).length?`<p class="src" style="font-size:.85rem"><a href="${st.all.find(x=>x.f.cal).f.cal}" target="_blank" rel="noopener">Field permit calendar</a> (shows booked times)</p>`:""}
+        ${OSM_COUNTS[s.id]?`<p class="muted" style="font-size:.82rem">OpenStreetMap shows ${OSM_COUNTS[s.id].n} here (<a href="${OSM_COUNTS[s.id].u}" target="_blank" rel="noopener">map data</a>).</p>`:""}
+        ${(s.blocks||[]).length?`<ul style="margin:0;padding-left:18px;font-size:.85rem">${s.blocks.map(b=>`<li>${b.days.map(d=>DSH[d]).join("/")} ${fmt(b.s)}–${fmt(b.e)}: ${b.label} · <a href="${b.src}" target="_blank" rel="noopener">source</a></li>`).join("")}</ul>`:""}
+        <p class="src" style="font-size:.85rem"><a href="${s.url}" target="_blank" rel="noopener">${s.osmSrc?"OpenStreetMap data":"Source page"}</a> · <a href="https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}" target="_blank" rel="noopener">Open in Google Maps</a> · <span class="muted mono">${s.lat.toFixed(4)}, ${s.lng.toFixed(4)}${s.approx?" (approx.)":""}</span></p>
+      </div></article>`;
+  });
+  list.innerHTML=h;
+  renderWeek();
+  list.querySelectorAll(".site").forEach(el=>{const id=el.id.slice(2);
+    const go=e=>{if(e.target.closest("a"))return; state.sel=state.sel===id?null:id; render();};
+    el.onclick=go; el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go(e);}};});
+}
+render();
+</script>
+
+</body>
+</html>
