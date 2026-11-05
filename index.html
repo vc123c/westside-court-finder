@@ -86,6 +86,8 @@ input[type=range]{padding:0;accent-color:var(--accent);width:200px;max-width:100
 .site.sel .detail{display:flex}
 .clock{overflow-x:auto}
 .bys-h{font-size:1rem;margin:8px 0 0}
+.wk-g{font-size:.9rem;margin:10px 0 4px;font-weight:600}.wk-g .muted{font-weight:400;font-size:.8rem}
+.stat .l b{color:var(--ink);font-weight:600}
 .bysport{overflow-x:auto}
 .bysport table{width:100%;border-collapse:collapse;font-size:.85rem}
 .bysport th,.bysport td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -566,14 +568,9 @@ function weekStats(test){
 }
 const hrs=n=>Number.isInteger(n)?n.toLocaleString():n.toFixed(1);
 const pctTxt=p=>p>0&&p<1?p.toFixed(1):String(Math.round(p));
-function renderWeek(){
-  const test=matches, w=weekStats(test), sn=SPORT_NAME[state.sport];
-  const setTxt=state.set==="indoor"?" indoor":state.set==="outdoor"?" outdoor":"";
-  const gymView=state.sport==="basketball"&&state.set==="indoor";
-  const placeWord=gymView?"gyms":"places";
-  document.getElementById("wk-h").textContent=`Free ${state.sport==="all"?(setTxt?setTxt.trim()+" play, all sports":"play, all sports"):setTxt.trim()+(setTxt?" ":"")+sn}, every hour of the week`;
-  document.getElementById("wk-sub").textContent=w.known?`Each cell is a half hour. Color shows the best option among the ${w.known} ${placeWord} with posted times${state.city==="all"?"":" in "+state.city}. Change Sport, Setting or Area below to redraw it.`:"No places with posted times match these filters.";
-  document.getElementById("weekclock").innerHTML=clockTable((d,t)=>{
+// Color for one half hour: best status among matching places.
+function weekCell(test,placeWord){
+  return (d,t)=>{
     const c={free:0,dropin:0,paid:0,league:0,prog:0};
     wkScope().forEach(s=>{const ks=s.facs.filter(test).map(f=>facStatus(s,f,d,t).k).filter(k=>c[k]!==undefined); if(!ks.length) return;
       ks.sort((a,b)=>ST[a].rank-ST[b].rank); c[ks[0]]++;});
@@ -584,7 +581,20 @@ function renderWeek(){
     if(c.league) return {c:"var(--league)",t:`${c.league} booked for leagues, none free`};
     if(c.prog) return {c:"var(--prog)",t:`${c.prog} open, no free time posted`};
     return {c:"var(--closed)",t:"All closed"};
-  });
+  };
+}
+const GROUP_NOTE={"basketball|indoor":"","basketball|outdoor":"First come. Unlit courts close at sunset.","tennis|outdoor":"LA city courts cost $8–12/hr; Santa Monica has free drop-in courts.","soccer|outdoor":"Rented by permit or held for city leagues.","baseball|outdoor":"Rented by permit or held for city leagues.","football|outdoor":"Rented by permit or held for city leagues."};
+function renderWeek(){
+  // Each sport/setting pair is shown on its own: never add gyms, outdoor courts and fields together.
+  const groups=GROUPS.filter(([sp,se])=>(state.sport==="all"||state.sport===sp)&&(state.set==="all"||state.set===se))
+    .map(([sp,se,l])=>{const test=f=>f.sport===sp&&f.set===se; return {sp,se,l,test,w:weekStats(test),word:se==="indoor"?"gyms":"places"};})
+    .filter(g=>g.w.known);
+  const multi=groups.length>1;
+  const area=state.city==="all"?"":" in "+state.city;
+  document.getElementById("wk-h").textContent=multi?"Free play by sport, every hour of the week":groups.length?`Free play: ${groups[0].l.toLowerCase()}, every hour of the week`:"Free play, every hour of the week";
+  document.getElementById("wk-sub").textContent=!groups.length?"No places with posted times match these filters.":
+    `Each cell is a half hour. Color shows the best option at that time among places with posted times${area}.${multi?" Each sport has its own chart.":""} Change Sport, Setting or Area below to redraw.`;
+  document.getElementById("weekclock").innerHTML=groups.map(g=>`${multi?`<h3 class="wk-g">${g.l} <span class="muted">· ${g.w.known} ${g.word} · ${hrs(g.w.k.free)} of ${hrs(g.w.open)} open hrs free</span></h3>`:""}${clockTable(weekCell(g.test,g.word))}`).join("");
   document.getElementById("weeklegend").innerHTML=`<span><span class="sw" style="background:var(--free)"></span>At least one free</span><span><span class="sw" style="background:var(--dropin)"></span>Drop-in, fee not posted</span><span><span class="sw" style="background:var(--paid)"></span>Pay or reserve only</span><span><span class="sw" style="background:var(--league)"></span>League use only</span><span><span class="sw" style="background:var(--prog)"></span>Open, no free time posted</span><span><span class="sw" style="background:var(--closed)"></span>All closed</span>`;
   // Breakdown by sport: share of open hours by status.
   const rows=GROUPS.filter(([sp,se])=>state.set==="all"||state.set===se).map(([sp,se,l])=>({sp,se,l,w:weekStats(f=>f.sport===sp&&f.set===se)})).filter(r=>r.w.open);
@@ -593,17 +603,15 @@ function renderWeek(){
       const segs=KINDS.filter(k=>r.w.k[k]).map(k=>`<span style="flex:${r.w.k[k]};background:var(--${ST[k].c})" title="${r.l}: ${hrs(r.w.k[k])} hrs/wk ${ST[k].t.toLowerCase()}"></span>`).join("");
       return `<tr class="${cur(r)?"on":""}" data-sp="${r.sp}" data-se="${r.se}" tabindex="0" title="Show only ${r.l.toLowerCase()}"><th scope="row">${r.l}</th><td class="mono">${r.w.known}</td><td class="mono">${hrs(r.w.open)}</td><td class="mono">${hrs(r.w.k.free)} <span class="muted">(${pctTxt(r.w.k.free/r.w.open*100)}%)</span></td><td class="barcol"><div class="sbar">${segs}</div></td></tr>`;}).join("")}</tbody></table>`;
   document.querySelectorAll("#bysport tr[data-sp]").forEach(tr=>{const go=()=>{state.sport=tr.dataset.sp;state.set=tr.dataset.se;save();render();};tr.onclick=go;tr.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}};});
-  document.getElementById("bysport-note").textContent=state.sport==="all"?"Bars use the same colors as the week chart. Click a row to show just that sport.":"Click a row to switch sport, or pick All sports below to compare them all.";
-  // Headline numbers for the current selection.
-  const pct=w.open?w.k.free/w.open*100:0, low=pct<20;
-  const fieldsIn=(state.sport==="all"||FIELD_SPORTS.includes(state.sport))&&state.set!=="indoor";
-  const fs=fieldsIn?weekStats(f=>FIELD_SPORTS.includes(f.sport)&&(state.sport==="all"||f.sport===state.sport)):null;
-  let h=`<div class="stat"><span class="n">${w.places}</span><span class="l">public ${placeWord} with ${state.sport==="all"?(setTxt?setTxt.trim():"sports")+" facilities":(setTxt.trim()+(setTxt?" ":"")+sn)} in ${state.city==="all"?"this area":state.city}</span></div>
-   <div class="stat"><span class="n mono">${hrs(w.open)}<small> hrs/wk</small></span><span class="l">open hours, added up across ${w.facs} ${gymView?"gyms":"listed gyms, court groups and fields"} at the ${w.known} places that post times</span></div>
-   <div class="stat${low?" alert":""}"><span class="n mono">${hrs(w.k.free)}<small> hrs/wk</small></span><span class="l">posted free play (${pctTxt(pct)}% of open hours)</span></div>
-   <div class="stat${low?" alert":""}"><span class="n mono">${hrs(w.eveFree)}<small> hrs/wk</small></span><span class="l">free play after 5 p.m. or on weekends</span></div>`;
-  if(fs&&fs.facs) h+=`<div class="stat alert"><span class="n mono">${fs.freeFacs}<small> of ${fs.facs}</small></span><span class="l">fields and diamonds with posted free open-play hours. Turf fields rent for $50–70/hr.</span></div>`;
-  if((state.sport==="all"||state.sport==="basketball")&&state.set!=="indoor"&&state.city==="all") h+=`<div class="stat alert"><span class="n mono">${SCHOOL_HOOPS}<small> at ${SCHOOLS_N} schools</small></span><span class="l">outdoor basketball courts at public schools (as mapped in OpenStreetMap), none with posted public hours</span></div>`;
+  document.getElementById("bysport-note").textContent="Bars use the same colors as the week charts. Click a row to show just that sport.";
+  // Headline numbers: one tile per sport, never summed across sports.
+  let h=groups.map(g=>{const p=g.w.open?g.w.k.free/g.w.open*100:0, alert=p<20;
+    const isField=FIELD_SPORTS.includes(g.sp);
+    const n=isField?`${g.w.freeFacs}<small> of ${g.w.facs} fields</small>`:`${hrs(g.w.k.free)}<small> of ${hrs(g.w.open)} hrs</small>`;
+    const l=isField?`<b>${g.l}</b> with posted free open-play hours${area}. ${GROUP_NOTE[g.sp+"|"+g.se]}`
+      :`<b>${g.l}</b>: posted free hours per week (${pctTxt(p)}%)${area}. ${g.se==="indoor"?`${hrs(g.w.eveFree)} free hours after 5 p.m. or on weekends.`:GROUP_NOTE[g.sp+"|"+g.se]}`;
+    return `<div class="stat${alert?" alert":""}"><span class="n mono">${n}</span><span class="l">${l}</span></div>`;}).join("");
+  if((state.sport==="all"||state.sport==="basketball")&&state.set!=="indoor"&&state.city==="all") h+=`<div class="stat alert"><span class="n mono">${SCHOOL_HOOPS}<small> at ${SCHOOLS_N} schools</small></span><span class="l"><b>School basketball courts</b> (as mapped in OpenStreetMap), none with posted public hours</span></div>`;
   document.getElementById("summary").innerHTML=h;
 }
 
